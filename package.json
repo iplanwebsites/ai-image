@@ -1,6 +1,6 @@
 {
   "name": "ai-image",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A unified wrapper for image generation inference APIs (OpenAI and Replicate) with CLI support, useful for MCP and sub-processes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

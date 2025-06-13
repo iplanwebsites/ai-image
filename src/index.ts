@@ -25,6 +25,7 @@ export interface GenerateOptions {
   compression?: number; // 0-100% for JPEG and WebP
   background?: 'transparent' | 'opaque';
   n?: number;
+  debug?: boolean;
 }
 
 export class ImageGenerator {
@@ -116,6 +117,7 @@ export class ImageGenerator {
 
   async generate(options: GenerateOptions): Promise<string[]> {
     const savedPaths: string[] = [];
+    const startTime = Date.now();
 
     try {
       if (this.provider === 'openai' && this.openai) {
@@ -124,7 +126,7 @@ export class ImageGenerator {
         const generateParams: any = {
           model: effectiveModel,
           prompt: options.prompt,
-          size: options.size || 'auto',
+          size: options.size || '1024x1024',
           quality: options.quality || 'auto',
           n: options.n || 1,
         //  response_format: 'b64_json'
@@ -139,6 +141,11 @@ export class ImageGenerator {
         }
         if (options.background) {
           generateParams.background = options.background;
+        }
+
+        if (options.debug) {
+          console.log('🐛 Debug - Full request parameters:');
+          console.log(JSON.stringify(generateParams, null, 2));
         }
 
         const result = await this.openai.images.generate(generateParams);
@@ -158,13 +165,20 @@ export class ImageGenerator {
         // Default to SDXL model if not specified
         const model = options.model || 'stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
         
+        const replicateInput = {
+          prompt: options.prompt,
+          width: parseInt(options.size?.split('x')[0] || '1024'),
+          height: parseInt(options.size?.split('x')[1] || '1024'),
+          num_outputs: options.n || 1
+        };
+
+        if (options.debug) {
+          console.log('🐛 Debug - Replicate model input:');
+          console.log(JSON.stringify(replicateInput, null, 2));
+        }
+
         const output = await this.replicate.run(model as `${string}/${string}` | `${string}/${string}:${string}`, {
-          input: {
-            prompt: options.prompt,
-            width: parseInt(options.size?.split('x')[0] || '1024'),
-            height: parseInt(options.size?.split('x')[1] || '1024'),
-            num_outputs: options.n || 1
-          }
+          input: replicateInput
         }) as string[];
 
         // Save each generated image
@@ -180,8 +194,13 @@ export class ImageGenerator {
         }
       }
 
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`⏱️  Generation completed in ${duration}s`);
+      
       return savedPaths;
     } catch (error) {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`⏱️  Generation failed after ${duration}s`);
       throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

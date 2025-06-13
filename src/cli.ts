@@ -25,11 +25,12 @@ program
   .option('-o, --output <path>', 'Output file path')
   .option('-d, --output-dir <dir>', 'Output directory', process.cwd())
   .option('-m, --model <model>', 'Model to use (provider-specific)')
-  .option('-s, --size <size>', 'Image size (1024x1024, 1536x1024, 1024x1536, auto)', 'auto')
+  .option('-s, --size <size>', 'Image size (1024x1024, 1536x1024, 1024x1536, auto)', '1024x1024')
   .option('-q, --quality <quality>', 'Image quality (low, medium, high, auto) - OpenAI only', 'auto')
   .option('-f, --format <format>', 'Output format (png, jpeg, webp) - OpenAI only', 'png')
   .option('-c, --compression <compression>', 'Compression level 0-100% for JPEG/WebP - OpenAI only')
   .option('-b, --background <background>', 'Background (transparent, opaque) - OpenAI only')
+  .option('--debug', 'Enable debug logging to show full request parameters')
   .option('-n, --number <n>', 'Number of images to generate', '1')
   .action(async (prompt, options) => {
     try {
@@ -62,11 +63,14 @@ program
       console.log(`🎨 Generating image with ${provider}...`);
       console.log(`📝 Prompt: "${prompt}"`);
       
-      // Loading animation
+      // Loading animation with provider-specific message
+      const providerText = provider === 'openai' ? 'OpenAI' : 'Replicate';
       const loadingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
       let frameIndex = 0;
+      let startTime = Date.now();
       const loadingInterval = setInterval(() => {
-        process.stdout.write(`\r${loadingFrames[frameIndex]} Processing...`);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        process.stdout.write(`\r${loadingFrames[frameIndex]} Processing @ ${providerText} (${elapsed}s)...`);
         frameIndex = (frameIndex + 1) % loadingFrames.length;
       }, 100);
       
@@ -83,6 +87,7 @@ program
         if (options.format) generateOptions.format = options.format;
         if (options.compression) generateOptions.compression = parseInt(options.compression);
         if (options.background) generateOptions.background = options.background;
+        if (options.debug) generateOptions.debug = true;
 
         const savedPaths = await generator.generate(generateOptions);
         
