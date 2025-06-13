@@ -46,6 +46,8 @@ Get your API keys:
 - OpenAI: https://platform.openai.com/api-keys
 - Replicate: https://replicate.com/account/api-tokens
 
+For more information about OpenAI's image generation capabilities, see the [OpenAI Image Generation Guide](https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1&api=image&multi-turn=imageid).
+
 ## CLI Usage
 
 ### Quick Start with npx

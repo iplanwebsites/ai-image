@@ -25,9 +25,11 @@ program
   .option('-o, --output <path>', 'Output file path')
   .option('-d, --output-dir <dir>', 'Output directory', process.cwd())
   .option('-m, --model <model>', 'Model to use (provider-specific)')
-  .option('-s, --size <size>', 'Image size (e.g., 1024x1024)', '1024x1024')
-  .option('-q, --quality <quality>', 'Image quality (standard or hd) - OpenAI only', 'standard')
-  .option('--style <style>', 'Image style (vivid or natural) - OpenAI only', 'vivid')
+  .option('-s, --size <size>', 'Image size (1024x1024, 1536x1024, 1024x1536, auto)', 'auto')
+  .option('-q, --quality <quality>', 'Image quality (low, medium, high, auto) - OpenAI only', 'auto')
+  .option('-f, --format <format>', 'Output format (png, jpeg, webp) - OpenAI only', 'png')
+  .option('-c, --compression <compression>', 'Compression level 0-100% for JPEG/WebP - OpenAI only')
+  .option('-b, --background <background>', 'Background (transparent, opaque) - OpenAI only')
   .option('-n, --number <n>', 'Number of images to generate', '1')
   .action(async (prompt, options) => {
     try {
@@ -69,13 +71,20 @@ program
       }, 100);
       
       try {
-        const savedPaths = await generator.generate({
-        prompt,
-        model: options.model,
-        size: options.size,
-        quality: options.quality,
-        n: parseInt(options.number)
-        });
+        const generateOptions: any = {
+          prompt,
+          model: options.model,
+          size: options.size,
+          quality: options.quality,
+          n: parseInt(options.number)
+        };
+
+        // Add optional parameters
+        if (options.format) generateOptions.format = options.format;
+        if (options.compression) generateOptions.compression = parseInt(options.compression);
+        if (options.background) generateOptions.background = options.background;
+
+        const savedPaths = await generator.generate(generateOptions);
         
         clearInterval(loadingInterval);
         process.stdout.write('\r');
@@ -101,8 +110,8 @@ program
   .action(() => {
     console.log('\n📋 Available Models:\n');
     console.log('OpenAI:');
-    console.log('  - gpt-image-1 (default)');
-    console.log('  - dall-e-2');
+    console.log('  - gpt-image-1 (default, new GPT image model)');
+    console.log('  - dall-e-2 (legacy DALL-E model)');
     console.log('\nReplicate:');
     console.log('  - stability-ai/sdxl (default)');
     console.log('  - stability-ai/stable-diffusion');

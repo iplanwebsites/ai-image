@@ -19,9 +19,11 @@ export interface ImageGeneratorOptions {
 export interface GenerateOptions {
   prompt: string;
   model?: string;
-  size?: '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792';
-  quality?: 'standard' | 'hd';
-//  style?: 'vivid' | 'natural';
+  size?: '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
+  quality?: 'low' | 'medium' | 'high' | 'auto';
+  format?: 'png' | 'jpeg' | 'webp';
+  compression?: number; // 0-100% for JPEG and WebP
+  background?: 'transparent' | 'opaque';
   n?: number;
 }
 
@@ -74,18 +76,18 @@ export class ImageGenerator {
       .substring(0, 200); // Limit length
   }
 
-  private async getOutputPath(prompt: string, index: number = 0): Promise<string> {
+  private async getOutputPath(prompt: string, index: number = 0, extension: string = 'png'): Promise<string> {
     let filename: string;
     
     if (this.outputFilename) {
       // If multiple images, append index
       const ext = path.extname(this.outputFilename);
       const name = path.basename(this.outputFilename, ext);
-      filename = index > 0 ? `${name}_${index}${ext || '.png'}` : `${name}${ext || '.png'}`;
+      filename = index > 0 ? `${name}_${index}${ext || `.${extension}`}` : `${name}${ext || `.${extension}`}`;
     } else {
       // Use sanitized prompt as filename
       const sanitized = this.sanitizeFilename(prompt);
-      filename = index > 0 ? `${sanitized}_${index}.png` : `${sanitized}.png`;
+      filename = index > 0 ? `${sanitized}_${index}.${extension}` : `${sanitized}.${extension}`;
     }
 
     let outputPath = path.join(this.outputDir, filename);
@@ -119,22 +121,35 @@ export class ImageGenerator {
       if (this.provider === 'openai' && this.openai) {
         const effectiveModel = options.model || 'gpt-image-1';
         console.log(`🤖 Using model: ${effectiveModel}`);
-        const result = await this.openai.images.generate({
+        const generateParams: any = {
           model: effectiveModel,
           prompt: options.prompt,
-          size: options.size || '1024x1024',
-          quality: options.quality || 'standard',
-       //   style: options.style || 'vivid',
+          size: options.size || 'auto',
+          quality: options.quality || 'auto',
           n: options.n || 1,
-          response_format: 'b64_json'
-        });
+        //  response_format: 'b64_json'
+        };
+
+        // Add optional parameters
+        if (options.format && options.format !== 'png') {
+          generateParams.output_format = options.format;
+        }
+        if (options.compression && (options.format === 'jpeg' || options.format === 'webp')) {
+          generateParams.output_compression = options.compression;
+        }
+        if (options.background) {
+          generateParams.background = options.background;
+        }
+
+        const result = await this.openai.images.generate(generateParams);
 
         // Save each generated image
         for (let i = 0; i < (result.data?.length || 0); i++) {
           const imageData = result.data?.[i];
           if (imageData?.b64_json) {
             const imageBytes = Buffer.from(imageData.b64_json, 'base64');
-            const outputPath = await this.getOutputPath(options.prompt, i);
+            const fileExtension = options.format || 'png';
+            const outputPath = await this.getOutputPath(options.prompt, i, fileExtension);
             await fs.writeFile(outputPath, imageBytes);
             savedPaths.push(outputPath);
           }
