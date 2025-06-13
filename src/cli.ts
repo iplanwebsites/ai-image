@@ -19,7 +19,7 @@ program
   .command('generate')
   .alias('gen')
   .description('Generate an image from a text prompt')
-  .argument('<prompt>', 'Text prompt for image generation')
+  .option('--prompt <prompt>', 'Text prompt for image generation')
   .option('-p, --provider <provider>', 'Provider to use (openai or replicate)', 'openai')
   .option('-k, --api-key <key>', 'API key (overrides environment variable)')
   .option('-o, --output <path>', 'Output file path')
@@ -32,8 +32,19 @@ program
   .option('-b, --background <background>', 'Background (transparent, opaque) - OpenAI only')
   .option('--debug', 'Enable debug logging to show full request parameters')
   .option('-n, --number <n>', 'Number of images to generate', '1')
-  .action(async (prompt, options) => {
+  .action(async (options) => {
     try {
+      if (options.debug) {
+        console.log('🐛 CLI Debug - Received parameters:');
+        console.log('Prompt:', options.prompt);
+        console.log('Options:', JSON.stringify(options, null, 2));
+      }
+
+      if (!options.prompt) {
+        console.error('Error: Prompt is required. Use --prompt "your prompt text"');
+        process.exit(1);
+      }
+      
       const provider = options.provider.toLowerCase() as Provider;
       
       if (!['openai', 'replicate'].includes(provider)) {
@@ -61,7 +72,7 @@ program
       });
 
       console.log(`🎨 Generating image with ${provider}...`);
-      console.log(`📝 Prompt: "${prompt}"`);
+      console.log(`📝 Prompt: "${options.prompt}"`);
       
       // Loading animation with provider-specific message
       const providerText = provider === 'openai' ? 'OpenAI' : 'Replicate';
@@ -76,7 +87,7 @@ program
       
       try {
         const generateOptions: any = {
-          prompt,
+          prompt: options.prompt,
           model: options.model,
           size: options.size,
           quality: options.quality,
@@ -88,6 +99,10 @@ program
         if (options.compression) generateOptions.compression = parseInt(options.compression);
         if (options.background) generateOptions.background = options.background;
         if (options.debug) generateOptions.debug = true;
+
+        if (options.debug) {
+          console.log('🎨 Generating image with openai...', generateOptions);
+        }
 
         const savedPaths = await generator.generate(generateOptions);
         

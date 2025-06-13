@@ -4,7 +4,7 @@ A unified wrapper for image generation APIs (OpenAI and Replicate) with CLI supp
 
 ## Features
 
-- 🎨 Support for multiple image generation providers (OpenAI DALL-E, Replicate)
+- 🎨 Support for multiple image generation providers (OpenAI GPT Image, Replicate)
 - 🖥️ Easy-to-use CLI interface with npx support
 - 📦 Programmatic API for integration into your projects
 - 🔐 Environment variable support for API keys

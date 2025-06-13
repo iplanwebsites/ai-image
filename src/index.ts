@@ -119,6 +119,10 @@ export class ImageGenerator {
     const savedPaths: string[] = [];
     const startTime = Date.now();
 
+
+console.log(`🎨 Generating image with ${this.provider}... OPTIONS:`, options);
+// alfsd()
+
     try {
       if (this.provider === 'openai' && this.openai) {
         const effectiveModel = options.model || 'gpt-image-1';
