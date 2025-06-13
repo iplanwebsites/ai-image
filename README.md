@@ -70,55 +70,55 @@ npx ai-image generate "A cozy coffee shop interior" --output coffee-shop.png
 
 ```bash
 # Generate with OpenAI (default)
-image-gen generate "A sunset over mountains"
+ai-image generate "A sunset over mountains"
 
 # Generate with OpenAI's GPT models (dall-e-2 or dall-e-3)
-image-gen generate "A steampunk airship" --model dall-e-3
-image-gen generate "A vintage camera" --model dall-e-2
+ai-image generate "A steampunk airship" --model dall-e-3
+ai-image generate "A vintage camera" --model dall-e-2
 
 # Generate with Replicate
-image-gen generate "A cyberpunk city at night" --provider replicate
+ai-image generate "A cyberpunk city at night" --provider replicate
 
 # Specify output file
-image-gen generate "A cute robot" --output robot.png
+ai-image generate "A cute robot" --output robot.png
 
 # Generate multiple images
-image-gen generate "Abstract art" --number 3
+ai-image generate "Abstract art" --number 3
 ```
 
 ### Advanced Options
 
 ```bash
 # Use specific OpenAI GPT model with size and quality options
-image-gen generate "Portrait of a wizard" --model dall-e-3 --size 1792x1024 --quality hd
+ai-image generate "Portrait of a wizard" --model dall-e-3 --size 1792x1024 --quality hd
 
 # Use dall-e-2 with multiple variations
-image-gen generate "A serene zen garden" --model dall-e-2 --number 4 --size 512x512
+ai-image generate "A serene zen garden" --model dall-e-2 --number 4 --size 512x512
 
 # Custom size and quality
-image-gen generate "Ocean waves" --size 1792x1024 --quality hd
+ai-image generate "Ocean waves" --size 1792x1024 --quality hd
 
 # Pass API key directly (useful for CI/CD or when not using .env)
-image-gen generate "Forest path" --api-key sk-...
+ai-image generate "Forest path" --api-key sk-...
 
 # Specify output directory
-image-gen generate "Desert landscape" --output-dir ./generated-images
+ai-image generate "Desert landscape" --output-dir ./generated-images
 
 # Combine options
-image-gen generate "A mystical dragon" --model dall-e-3 --quality hd --style vivid --output dragon-art.png
+ai-image generate "A mystical dragon" --model dall-e-3 --quality hd --style vivid --output dragon-art.png
 ```
 
 ### Available Commands
 
 ```bash
 # Generate images
-image-gen generate <prompt> [options]
+ai-image generate <prompt> [options]
 
 # List available models
-image-gen models
+ai-image models
 
 # Show setup instructions
-image-gen setup
+ai-image setup
 ```
 
 ### Options

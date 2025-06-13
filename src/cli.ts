@@ -11,7 +11,7 @@ dotenv.config();
 const program = new Command();
 
 program
-  .name('image-gen')
+  .name('ai-image')
   .description('Generate images using OpenAI or Replicate APIs')
   .version('1.0.0');
 
@@ -59,20 +59,35 @@ program
 
       console.log(`🎨 Generating image with ${provider}...`);
       console.log(`📝 Prompt: "${prompt}"`);
-
-      const savedPaths = await generator.generate({
+      
+      // Loading animation
+      const loadingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+      let frameIndex = 0;
+      const loadingInterval = setInterval(() => {
+        process.stdout.write(`\r${loadingFrames[frameIndex]} Processing...`);
+        frameIndex = (frameIndex + 1) % loadingFrames.length;
+      }, 100);
+      
+      try {
+        const savedPaths = await generator.generate({
         prompt,
         model: options.model,
         size: options.size,
         quality: options.quality,
-        style: options.style,
         n: parseInt(options.number)
-      });
-
-      console.log(`✅ Image(s) generated successfully!`);
-      savedPaths.forEach((path, index) => {
-        console.log(`📁 Saved to: ${path}`);
-      });
+        });
+        
+        clearInterval(loadingInterval);
+        process.stdout.write('\r');
+        console.log(`✅ Image(s) generated successfully!`);
+        savedPaths.forEach((path) => {
+          console.log(`📁 Saved to: ${path}`);
+        });
+      } catch (generationError) {
+        clearInterval(loadingInterval);
+        process.stdout.write('\r');
+        throw generationError;
+      }
     } catch (error) {
       console.error('❌ Error:', error instanceof Error ? error.message : 'Unknown error');
       process.exit(1);
@@ -86,7 +101,7 @@ program
   .action(() => {
     console.log('\n📋 Available Models:\n');
     console.log('OpenAI:');
-    console.log('  - dall-e-3 (default)');
+    console.log('  - gpt-image-1 (default)');
     console.log('  - dall-e-2');
     console.log('\nReplicate:');
     console.log('  - stability-ai/sdxl (default)');

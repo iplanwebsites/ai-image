@@ -21,7 +21,7 @@ export interface GenerateOptions {
   model?: string;
   size?: '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792';
   quality?: 'standard' | 'hd';
-  style?: 'vivid' | 'natural';
+//  style?: 'vivid' | 'natural';
   n?: number;
 }
 
@@ -74,7 +74,7 @@ export class ImageGenerator {
       .substring(0, 200); // Limit length
   }
 
-  private getOutputPath(prompt: string, index: number = 0): string {
+  private async getOutputPath(prompt: string, index: number = 0): Promise<string> {
     let filename: string;
     
     if (this.outputFilename) {
@@ -88,7 +88,28 @@ export class ImageGenerator {
       filename = index > 0 ? `${sanitized}_${index}.png` : `${sanitized}.png`;
     }
 
-    return path.join(this.outputDir, filename);
+    let outputPath = path.join(this.outputDir, filename);
+    
+    // Handle filename collisions
+    let counter = 1;
+    while (await this.fileExists(outputPath)) {
+      const ext = path.extname(filename);
+      const name = path.basename(filename, ext);
+      const newFilename = `${name} ${counter}${ext}`;
+      outputPath = path.join(this.outputDir, newFilename);
+      counter++;
+    }
+
+    return outputPath;
+  }
+
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async generate(options: GenerateOptions): Promise<string[]> {
@@ -96,12 +117,14 @@ export class ImageGenerator {
 
     try {
       if (this.provider === 'openai' && this.openai) {
+        const effectiveModel = options.model || 'gpt-image-1';
+        console.log(`🤖 Using model: ${effectiveModel}`);
         const result = await this.openai.images.generate({
-          model: options.model || 'dall-e-3',
+          model: effectiveModel,
           prompt: options.prompt,
           size: options.size || '1024x1024',
           quality: options.quality || 'standard',
-          style: options.style || 'vivid',
+       //   style: options.style || 'vivid',
           n: options.n || 1,
           response_format: 'b64_json'
         });
@@ -111,7 +134,7 @@ export class ImageGenerator {
           const imageData = result.data?.[i];
           if (imageData?.b64_json) {
             const imageBytes = Buffer.from(imageData.b64_json, 'base64');
-            const outputPath = this.getOutputPath(options.prompt, i);
+            const outputPath = await this.getOutputPath(options.prompt, i);
             await fs.writeFile(outputPath, imageBytes);
             savedPaths.push(outputPath);
           }
@@ -136,7 +159,7 @@ export class ImageGenerator {
           const arrayBuffer = await response.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           
-          const outputPath = this.getOutputPath(options.prompt, i);
+          const outputPath = await this.getOutputPath(options.prompt, i);
           await fs.writeFile(outputPath, buffer);
           savedPaths.push(outputPath);
         }
