@@ -14,6 +14,11 @@ _.png
 _.jpg
 _.jpeg
 _.webp
+# Generated images (for testing)
+*.png
+*.jpg
+*.jpeg
+*.webp
 
 # Development
 
