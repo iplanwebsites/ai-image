@@ -27,7 +27,7 @@ npm install -g ai-image
 Or use directly with npx (no installation required):
 
 ```bash
-npx ai-image generate "Your prompt here"
+npx ai-image generate --prompt "Your prompt here"
 ```
 
 ## Setup
@@ -55,66 +55,62 @@ For more information about OpenAI's image generation capabilities, see the [Open
 No installation needed - use directly with npx:
 
 ```bash
-# Generate with OpenAI DALL-E 3 (default)
-npx ai-image generate "A majestic mountain landscape at sunset"
-
-# Use GPT-4 vision model (dall-e-3)
-npx ai-image generate "A futuristic robot in a garden" --model dall-e-3
+# Generate with OpenAI GPT Image (default)
+npx ai-image generate --prompt "A majestic mountain landscape at sunset"
 
 # Generate with high quality
-npx ai-image generate "Portrait of a wise owl wearing glasses" --quality hd
+npx ai-image generate --prompt "Portrait of a wise owl wearing glasses" --quality high
+
+# Generate custom size
+npx ai-image generate --prompt "A futuristic robot in a garden" --size 1536x1024
 
 # Save with custom filename
-npx ai-image generate "A cozy coffee shop interior" --output coffee-shop.png
+npx ai-image generate --prompt "A cozy coffee shop interior" --output coffee-shop.png
 ```
 
 ### Basic Usage
 
 ```bash
 # Generate with OpenAI (default)
-ai-image generate "A sunset over mountains"
+ai-image generate --prompt "A sunset over mountains"
 
-# Generate with OpenAI's GPT models (dall-e-2 or dall-e-3)
-ai-image generate "A steampunk airship" --model dall-e-3
-ai-image generate "A vintage camera" --model dall-e-2
+# Use DALL-E 2 (legacy model)
+ai-image generate --prompt "A vintage camera" --model dall-e-2
 
 # Generate with Replicate
-ai-image generate "A cyberpunk city at night" --provider replicate
+ai-image generate --prompt "A cyberpunk city at night" --provider replicate
 
 # Specify output file
-ai-image generate "A cute robot" --output robot.png
+ai-image generate --prompt "A cute robot" --output robot.png
 
 # Generate multiple images
-ai-image generate "Abstract art" --number 3
+ai-image generate --prompt "Abstract art" --number 3
 ```
 
 ### Advanced Options
 
 ```bash
-# Use specific OpenAI GPT model with size and quality options
-ai-image generate "Portrait of a wizard" --model dall-e-3 --size 1792x1024 --quality hd
-
-# Use dall-e-2 with multiple variations
-ai-image generate "A serene zen garden" --model dall-e-2 --number 4 --size 512x512
-
 # Custom size and quality
-ai-image generate "Ocean waves" --size 1792x1024 --quality hd
+ai-image generate --prompt "Ocean waves" --size 1536x1024 --quality high
+
+# Use DALL-E 2 (legacy) with multiple variations
+ai-image generate --prompt "A serene zen garden" --model dall-e-2 --number 4
 
 # Pass API key directly (useful for CI/CD or when not using .env)
-ai-image generate "Forest path" --api-key sk-...
+ai-image generate --prompt "Forest path" --api-key sk-...
 
 # Specify output directory
-ai-image generate "Desert landscape" --output-dir ./generated-images
+ai-image generate --prompt "Desert landscape" --output-dir ./generated-images
 
-# Combine options
-ai-image generate "A mystical dragon" --model dall-e-3 --quality hd --style vivid --output dragon-art.png
+# Combine options with debug output
+ai-image generate --prompt "A mystical dragon" --quality high --output dragon-art.png --debug
 ```
 
 ### Available Commands
 
 ```bash
-# Generate images
-ai-image generate <prompt> [options]
+# Generate images (prompt is required)
+ai-image generate --prompt "your text here" [options]
 
 # List available models
 ai-image models
@@ -125,15 +121,17 @@ ai-image setup
 
 ### Options
 
-- `-p, --provider <provider>` - Provider to use (openai or replicate)
+- `--prompt <prompt>` - **Required** Text prompt for image generation
+- `-p, --provider <provider>` - Provider to use (openai or replicate, default: openai)
 - `-k, --api-key <key>` - API key (overrides environment variable)
 - `-o, --output <path>` - Output file path
 - `-d, --output-dir <dir>` - Output directory
-- `-m, --model <model>` - Model to use
-- `-s, --size <size>` - Image size (e.g., 1024x1024)
-- `-q, --quality <quality>` - Image quality (standard or hd) - OpenAI only
-- `--style <style>` - Image style (vivid or natural) - OpenAI only
+- `-m, --model <model>` - Model to use (dall-e-2 for legacy)
+- `-s, --size <size>` - Image size (1024x1024, 1536x1024, 1024x1536)
+- `-q, --quality <quality>` - Image quality (low, medium, high, auto) - OpenAI only
+- `-f, --format <format>` - Output format (png, jpeg, webp) - OpenAI only
 - `-n, --number <n>` - Number of images to generate
+- `--debug` - Enable debug logging
 
 ## Programmatic Usage
 
@@ -229,11 +227,10 @@ const paths = await generator.generate({
 
 ### OpenAI
 
-- `dall-e-3` (default) - Latest DALL-E model with best quality
-  - Sizes: 1024x1024, 1024x1792, 1792x1024
-  - Quality: standard, hd
-  - Style: vivid, natural
-- `dall-e-2` - Previous generation, good for variations
+- `gpt-image-1` (default) - Latest GPT Image model with best quality
+  - Sizes: 1024x1024, 1536x1024, 1024x1536
+  - Quality: low, medium, high, auto
+- `dall-e-2` (legacy) - Previous generation DALL-E model
   - Sizes: 256x256, 512x512, 1024x1024
   - Supports generating up to 10 variations
 

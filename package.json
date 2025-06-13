@@ -1,6 +1,6 @@
 {
   "name": "ai-image",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A unified wrapper for image generation inference APIs (OpenAI and Replicate) with CLI support, useful for MCP and sub-processes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,6 +22,10 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iplanwebsites/ai-image"
+  },
   "dependencies": {
     "commander": "^11.1.0",
     "dotenv": "^16.3.1",
