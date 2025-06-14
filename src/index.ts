@@ -43,7 +43,7 @@ export class ImageGenerator {
     const apiKey = options.apiKey || this.getApiKeyFromEnv(options.provider);
     
     if (!apiKey) {
-      throw new Error(`API key for ${options.provider} not found. Please provide it via parameter or environment variable.`);
+      throw new Error(`[AI-IMAGE] API key for ${options.provider} not found. Please provide it via parameter or environment variable.`);
     }
 
     switch (options.provider) {

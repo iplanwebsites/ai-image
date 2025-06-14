@@ -252,6 +252,11 @@ try {
 }
 ```
 
+# TODOs
+
+- Ensure folder are created if they don't exists already (preventing a save error)
+- Reduce the output to LLMs, maybe keep it just for CLI use.
+
 ## License
 
 MIT
