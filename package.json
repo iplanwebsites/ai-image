@@ -1,6 +1,6 @@
 {
   "name": "ai-image",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "A unified wrapper for image generation inference APIs (OpenAI and Replicate) with CLI support, useful for MCP and sub-processes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,8 +10,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
-    "prepublishOnly": "npm run build",
-    "mcp": "npx @modelcontextprotocol/inspector node src/mcp.mjs "
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "image-generation",
@@ -28,7 +27,6 @@
     "url": "git+https://github.com/iplanwebsites/ai-image.git"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.3",
     "commander": "^11.1.0",
     "dotenv": "^16.3.1",
     "openai": "^4.24.0",

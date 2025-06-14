@@ -15,8 +15,8 @@ class AIImageMCPServer {
   constructor() {
     this.server = new Server(
       {
-        name: "ai-image-generator",
-        version: "0.1.0",
+        name: "ai-image/mcp",
+        version: "0.0.1",
       },
       {
         capabilities: {
@@ -64,20 +64,42 @@ class AIImageMCPServer {
               required: ["prompt"],
             },
           },
+          {
+            name: "pizza-test",
+            description: "Mock test tool that returns a password",
+            inputSchema: {
+              type: "object",
+              properties: {},
+              required: [],
+            },
+          },
         ],
       };
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (request.params.name !== "generate_ai_image") {
+      if (request.params.name === "generate_ai_image") {
+        return await this.handleGenerateImage(request.params.arguments);
+      } else if (request.params.name === "pizza-test") {
+        return await this.handlePizzaTest(request.params.arguments);
+      } else {
         throw new McpError(
           ErrorCode.MethodNotFound,
           `Unknown tool: ${request.params.name}`
         );
       }
-
-      return await this.handleGenerateImage(request.params.arguments);
     });
+  }
+
+  async handlePizzaTest() {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "kangaroo",
+        },
+      ],
+    };
   }
 
   async handleGenerateImage(args) {
