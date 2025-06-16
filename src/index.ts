@@ -117,16 +117,10 @@ export class ImageGenerator {
 
   async generate(options: GenerateOptions): Promise<string[]> {
     const savedPaths: string[] = [];
-    const startTime = Date.now();
-
-
-console.log(`🎨 Generating image with ${this.provider}... OPTIONS:`, options);
-// alfsd()
 
     try {
       if (this.provider === 'openai' && this.openai) {
         const effectiveModel = options.model || 'gpt-image-1';
-        console.log(`🤖 Using model: ${effectiveModel}`);
         const generateParams: any = {
           model: effectiveModel,
           prompt: options.prompt,
@@ -198,13 +192,9 @@ console.log(`🎨 Generating image with ${this.provider}... OPTIONS:`, options);
         }
       }
 
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`⏱️  Generation completed in ${duration}s`);
-      
       return savedPaths;
     } catch (error) {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`⏱️  Generation failed after ${duration}s`);
+      console.error(`❌ Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

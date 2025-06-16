@@ -254,8 +254,9 @@ try {
 
 # TODOs
 
+- Add prompt metadata to exifs/file meta.
 - Ensure folder are created if they don't exists already (preventing a save error)
-- Reduce the output to LLMs, maybe keep it just for CLI use.
+- Reduce the output volume to LLMs, maybe keep it just for CLI use.
 
 ## License
 

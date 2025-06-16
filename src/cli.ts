@@ -71,8 +71,6 @@ program
         outputFilename
       });
 
-      console.log(`🎨 Generating image with ${provider}...`);
-      console.log(`📝 Prompt: "${options.prompt}"`);
       
       // Loading animation with provider-specific message
       const providerText = provider === 'openai' ? 'OpenAI' : 'Replicate';
@@ -83,7 +81,7 @@ program
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         process.stdout.write(`\r${loadingFrames[frameIndex]} Processing @ ${providerText} (${elapsed}s)...`);
         frameIndex = (frameIndex + 1) % loadingFrames.length;
-      }, 100);
+      }, 9000);
       
       try {
         const generateOptions: any = {
