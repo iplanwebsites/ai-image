@@ -34,7 +34,10 @@
     "imagen",
     "google",
     "together-ai",
-    "black-forest-labs"
+    "black-forest-labs",
+    "fireworks",
+    "ollama",
+    "local"
   ],
   "author": "",
   "license": "MIT",

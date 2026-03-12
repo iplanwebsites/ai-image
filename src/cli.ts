@@ -14,7 +14,7 @@ const isTTY = process.stdout.isTTY;
 
 program
   .name('ai-image')
-  .description('Generate images using OpenAI, Replicate, Stability AI, FAL.ai, Together AI, BFL, or Google Imagen')
+  .description('Unified image generation CLI — 9 providers including local models')
   .version('0.1.0');
 
 program
@@ -22,7 +22,7 @@ program
   .alias('gen')
   .description('Generate an image from a text prompt')
   .option('--prompt <prompt>', 'Text prompt for image generation')
-  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl, google', 'openai')
+  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama', 'openai')
   .option('-k, --api-key <key>', 'API key (overrides environment variable)')
   .option('-o, --output <path>', 'Output file path')
   .option('-d, --output-dir <dir>', 'Output directory', process.cwd())
@@ -59,8 +59,8 @@ program
 
       const provider = options.provider.toLowerCase() as Provider;
 
-      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl', 'google'].includes(provider)) {
-        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl, google';
+      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl', 'google', 'fireworks', 'ollama'].includes(provider)) {
+        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama';
         if (options.json) {
           console.log(JSON.stringify({ error: msg }));
         } else {
@@ -100,6 +100,8 @@ program
           together: 'Together AI',
           bfl: 'Black Forest Labs',
           google: 'Google Imagen',
+          fireworks: 'Fireworks AI',
+          ollama: 'Ollama (local)',
         };
         const providerText = providerNames[provider] || provider;
         const loadingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -215,6 +217,14 @@ program
         { id: 'imagen-4.0-fast-generate-001', description: 'Imagen 4 Fast' },
         { id: 'imagen-4.0-ultra-generate-001', description: 'Imagen 4 Ultra' },
       ],
+      fireworks: [
+        { id: 'flux-1-schnell-fp8', description: 'Flux Schnell FP8 (default, fast)', default: true },
+      ],
+      ollama: [
+        { id: 'x/flux2-klein:4b', description: 'Flux 2 Klein 4B (default)', default: true },
+        { id: 'x/flux2-klein:9b', description: 'Flux 2 Klein 9B' },
+        { id: 'x/z-image-turbo', description: 'Z-Image Turbo 6B' },
+      ],
     };
 
     if (options.json) {
@@ -237,6 +247,10 @@ program
     models.bfl.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\nGoogle Imagen:');
     models.google.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
+    console.log('\nFireworks AI:');
+    models.fireworks.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
+    console.log('\nOllama (local):');
+    models.ollama.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\n💡 Tip: Use any model ID from the respective provider\'s catalog');
   });
 
@@ -254,7 +268,9 @@ program
     console.log('   FAL_KEY=your_key_here');
     console.log('   TOGETHER_API_KEY=your_key_here');
     console.log('   BFL_API_KEY=your_key_here');
-    console.log('   GOOGLE_API_KEY=your_key_here\n');
+    console.log('   GOOGLE_API_KEY=your_key_here');
+    console.log('   FIREWORKS_API_KEY=your_key_here\n');
+    console.log('   # Ollama runs locally — no API key needed\n');
     console.log('3. Or pass API keys directly with --api-key flag\n');
     console.log('📚 Get your API keys:');
     console.log('   - OpenAI:      https://platform.openai.com/api-keys');
@@ -262,8 +278,10 @@ program
     console.log('   - Stability:   https://platform.stability.ai/account/keys');
     console.log('   - FAL.ai:      https://fal.ai/dashboard/keys');
     console.log('   - Together:    https://api.together.xyz/settings/api-keys');
-    console.log('   - BFL:         https://api.bfl.ml/auth/login');
+    console.log('   - BFL:         https://api.bfl.ai');
     console.log('   - Google:      https://aistudio.google.com/apikey');
+    console.log('   - Fireworks:   https://fireworks.ai/account/api-keys');
+    console.log('   - Ollama:      https://ollama.com (local, no key)');
   });
 
 program.parse();

@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl' | 'google';
+export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl' | 'google' | 'fireworks' | 'ollama';
 
 export interface ImageGeneratorOptions {
   provider: Provider;
@@ -81,6 +81,8 @@ export class ImageGenerator {
       case 'together':
       case 'bfl':
       case 'google':
+      case 'fireworks':
+      case 'ollama':
         // These providers use REST APIs directly; key stored for later use
         break;
       default:
@@ -104,6 +106,10 @@ export class ImageGenerator {
         return process.env.BFL_API_KEY;
       case 'google':
         return process.env.GOOGLE_API_KEY;
+      case 'fireworks':
+        return process.env.FIREWORKS_API_KEY;
+      case 'ollama':
+        return 'ollama'; // Ollama doesn't need an API key
       default:
         return undefined;
     }
@@ -195,6 +201,12 @@ export class ImageGenerator {
           break;
         case 'google':
           usedModel = await this.generateGoogle(options, savedPaths, outputDir, outputFilename);
+          break;
+        case 'fireworks':
+          usedModel = await this.generateFireworks(options, savedPaths, outputDir, outputFilename);
+          break;
+        case 'ollama':
+          usedModel = await this.generateOllama(options, savedPaths, outputDir, outputFilename);
           break;
       }
 
@@ -528,7 +540,7 @@ export class ImageGenerator {
 
   private async generateBfl(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
     const model = options.model || 'flux-pro-1.1';
-    const apiHost = 'https://api.bfl.ml';
+    const apiHost = 'https://api.bfl.ai';
 
     const size = options.size || '1024x1024';
     const [w, h] = size.split('x').map(Number);
@@ -586,7 +598,7 @@ export class ImageGenerator {
     for (let attempt = 0; attempt < 60; attempt++) {
       await new Promise(r => setTimeout(r, 2000));
 
-      const res = await fetch(`https://api.bfl.ml/v1/get_result?id=${taskId}`, {
+      const res = await fetch(`https://api.bfl.ai/v1/get_result?id=${taskId}`, {
         headers: { 'X-Key': this.apiKey! },
       });
       const data = await res.json() as { status: string; result?: { sample: string } };
@@ -657,6 +669,118 @@ export class ImageGenerator {
       const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
       await fs.writeFile(outputPath, buffer);
       savedPaths.push(outputPath);
+    }
+
+    return model;
+  }
+
+  // ─── Fireworks AI ─────────────────────────────────────────────────
+
+  private async generateFireworks(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
+    const model = options.model || 'flux-1-schnell-fp8';
+    const apiHost = 'https://api.fireworks.ai';
+    const endpoint = `/inference/v1/workflows/accounts/fireworks/models/${model}/text_to_image`;
+
+    const size = options.size || '1024x1024';
+    const [w, h] = size.split('x').map(Number);
+    const aspectRatio = this.simplifyRatio(w || 1024, h || 1024);
+
+    const body: Record<string, unknown> = {
+      prompt: options.prompt,
+      aspect_ratio: aspectRatio,
+    };
+
+    if (options.guidanceScale != null) body.cfg_scale = options.guidanceScale;
+    if (options.steps != null) body.steps = options.steps;
+    if (options.seed != null) body.seed = options.seed;
+    if (options.negativePrompt) body.negative_prompt = options.negativePrompt;
+
+    if (options.debug) {
+      console.error(`[debug] Fireworks request: POST ${apiHost}${endpoint}`);
+      console.error('[debug] Fireworks body:', JSON.stringify(body, null, 2));
+    }
+
+    const n = options.n || 1;
+    for (let i = 0; i < n; i++) {
+      const response = await fetch(`${apiHost}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Fireworks API error (${response.status}): ${errText}`);
+      }
+
+      const result = await response.json() as { base64?: string[]; data?: Array<{ b64_json: string }> };
+
+      // Fireworks returns base64 array or data array depending on model
+      let b64: string | undefined;
+      if (result.base64?.[0]) {
+        b64 = result.base64[0];
+      } else if (result.data?.[0]?.b64_json) {
+        b64 = result.data[0].b64_json;
+      }
+
+      if (b64) {
+        const buffer = Buffer.from(b64, 'base64');
+        const ext = options.format || 'jpeg';
+        const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
+        await fs.writeFile(outputPath, buffer);
+        savedPaths.push(outputPath);
+      }
+    }
+
+    return model;
+  }
+
+  // ─── Ollama (Local) ─────────────────────────────────────────────────
+
+  private async generateOllama(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
+    const model = options.model || 'x/flux2-klein:4b';
+    // Support custom Ollama host via apiKey field (e.g. "http://my-server:11434")
+    const isCustomHost = this.apiKey && this.apiKey.startsWith('http');
+    const apiHost = isCustomHost ? this.apiKey! : 'http://localhost:11434';
+
+    const body: Record<string, unknown> = {
+      model,
+      prompt: options.prompt,
+      stream: false,
+    };
+
+    if (options.debug) {
+      console.error(`[debug] Ollama request: POST ${apiHost}/api/generate`);
+      console.error('[debug] Ollama body:', JSON.stringify(body, null, 2));
+    }
+
+    const n = options.n || 1;
+    for (let i = 0; i < n; i++) {
+      const response = await fetch(`${apiHost}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Ollama API error (${response.status}): ${errText}`);
+      }
+
+      const result = await response.json() as { image?: string; response?: string };
+
+      const imageData = result.image || result.response;
+      if (imageData) {
+        const buffer = Buffer.from(imageData, 'base64');
+        const ext = options.format || 'png';
+        const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
+        await fs.writeFile(outputPath, buffer);
+        savedPaths.push(outputPath);
+      }
     }
 
     return model;
