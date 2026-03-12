@@ -1,9 +1,16 @@
 {
   "name": "ai-image",
-  "version": "0.0.8",
-  "description": "A unified wrapper for image generation inference APIs (OpenAI and Replicate) with CLI support, useful for MCP and sub-processes",
+  "version": "0.1.0",
+  "description": "A unified wrapper for image generation inference APIs (OpenAI, Replicate, Stability AI, FAL.ai) with CLI support, useful for MCP and sub-processes",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "ai-image": "dist/cli.js"
   },
@@ -16,9 +23,14 @@
     "image-generation",
     "openai",
     "replicate",
+    "stability-ai",
+    "fal",
+    "flux",
     "cli",
     "ai",
-    "GPT"
+    "GPT",
+    "dall-e",
+    "stable-diffusion"
   ],
   "author": "",
   "license": "MIT",
@@ -38,6 +50,6 @@
     "typescript": "^5.3.0"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   }
 }
