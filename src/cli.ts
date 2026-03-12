@@ -14,7 +14,7 @@ const isTTY = process.stdout.isTTY;
 
 program
   .name('ai-image')
-  .description('Generate images using OpenAI, Replicate, Stability AI, or FAL.ai')
+  .description('Generate images using OpenAI, Replicate, Stability AI, FAL.ai, Together AI, BFL, or Google Imagen')
   .version('0.1.0');
 
 program
@@ -22,7 +22,7 @@ program
   .alias('gen')
   .description('Generate an image from a text prompt')
   .option('--prompt <prompt>', 'Text prompt for image generation')
-  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl', 'openai')
+  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl, google', 'openai')
   .option('-k, --api-key <key>', 'API key (overrides environment variable)')
   .option('-o, --output <path>', 'Output file path')
   .option('-d, --output-dir <dir>', 'Output directory', process.cwd())
@@ -59,8 +59,8 @@ program
 
       const provider = options.provider.toLowerCase() as Provider;
 
-      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl'].includes(provider)) {
-        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl';
+      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl', 'google'].includes(provider)) {
+        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl, google';
         if (options.json) {
           console.log(JSON.stringify({ error: msg }));
         } else {
@@ -99,6 +99,7 @@ program
           fal: 'FAL.ai',
           together: 'Together AI',
           bfl: 'Black Forest Labs',
+          google: 'Google Imagen',
         };
         const providerText = providerNames[provider] || provider;
         const loadingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -178,8 +179,8 @@ program
     const models = {
       openai: [
         { id: 'gpt-image-1', description: 'GPT Image 1 (default)', default: true },
-        { id: 'dall-e-3', description: 'DALL-E 3' },
-        { id: 'dall-e-2', description: 'DALL-E 2 (legacy)' },
+        { id: 'dall-e-3', description: 'DALL-E 3 (deprecated May 2026)' },
+        { id: 'dall-e-2', description: 'DALL-E 2 (deprecated May 2026)' },
       ],
       replicate: [
         { id: 'stability-ai/sdxl', description: 'Stable Diffusion XL (default)', default: true },
@@ -209,6 +210,11 @@ program
         { id: 'flux-pro', description: 'Flux Pro' },
         { id: 'flux-dev', description: 'Flux Dev' },
       ],
+      google: [
+        { id: 'imagen-4.0-generate-001', description: 'Imagen 4 (default)', default: true },
+        { id: 'imagen-4.0-fast-generate-001', description: 'Imagen 4 Fast' },
+        { id: 'imagen-4.0-ultra-generate-001', description: 'Imagen 4 Ultra' },
+      ],
     };
 
     if (options.json) {
@@ -229,6 +235,8 @@ program
     models.together.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\nBlack Forest Labs (BFL):');
     models.bfl.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
+    console.log('\nGoogle Imagen:');
+    models.google.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\n💡 Tip: Use any model ID from the respective provider\'s catalog');
   });
 
@@ -245,7 +253,8 @@ program
     console.log('   STABILITY_API_KEY=your_key_here');
     console.log('   FAL_KEY=your_key_here');
     console.log('   TOGETHER_API_KEY=your_key_here');
-    console.log('   BFL_API_KEY=your_key_here\n');
+    console.log('   BFL_API_KEY=your_key_here');
+    console.log('   GOOGLE_API_KEY=your_key_here\n');
     console.log('3. Or pass API keys directly with --api-key flag\n');
     console.log('📚 Get your API keys:');
     console.log('   - OpenAI:      https://platform.openai.com/api-keys');
@@ -254,6 +263,7 @@ program
     console.log('   - FAL.ai:      https://fal.ai/dashboard/keys');
     console.log('   - Together:    https://api.together.xyz/settings/api-keys');
     console.log('   - BFL:         https://api.bfl.ml/auth/login');
+    console.log('   - Google:      https://aistudio.google.com/apikey');
   });
 
 program.parse();

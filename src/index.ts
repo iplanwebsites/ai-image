@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl';
+export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl' | 'google';
 
 export interface ImageGeneratorOptions {
   provider: Provider;
@@ -80,6 +80,7 @@ export class ImageGenerator {
       case 'fal':
       case 'together':
       case 'bfl':
+      case 'google':
         // These providers use REST APIs directly; key stored for later use
         break;
       default:
@@ -101,6 +102,8 @@ export class ImageGenerator {
         return process.env.TOGETHER_API_KEY;
       case 'bfl':
         return process.env.BFL_API_KEY;
+      case 'google':
+        return process.env.GOOGLE_API_KEY;
       default:
         return undefined;
     }
@@ -189,6 +192,9 @@ export class ImageGenerator {
           break;
         case 'bfl':
           usedModel = await this.generateBfl(options, savedPaths, outputDir, outputFilename);
+          break;
+        case 'google':
+          usedModel = await this.generateGoogle(options, savedPaths, outputDir, outputFilename);
           break;
       }
 
@@ -599,6 +605,61 @@ export class ImageGenerator {
     }
 
     throw new Error('BFL generation timed out');
+  }
+
+  // ─── Google Imagen (Gemini API) ──────────────────────────────────
+
+  private async generateGoogle(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
+    const model = options.model || 'imagen-4.0-generate-001';
+    const apiHost = 'https://generativelanguage.googleapis.com';
+    const endpoint = `/v1beta/models/${model}:predict`;
+
+    const size = options.size || '1024x1024';
+    const [w, h] = size.split('x').map(Number);
+    const aspectRatio = this.simplifyRatio(w || 1024, h || 1024);
+
+    const body = {
+      instances: [{ prompt: options.prompt }],
+      parameters: {
+        sampleCount: options.n || 1,
+        aspectRatio,
+        outputOptions: {
+          mimeType: options.format === 'jpeg' ? 'image/jpeg' : 'image/png',
+        },
+        ...(options.negativePrompt ? { negativePrompt: options.negativePrompt } : {}),
+        ...(options.seed != null ? { seed: options.seed } : {}),
+        ...(options.guidanceScale != null ? { guidanceScale: options.guidanceScale } : {}),
+      },
+    };
+
+    if (options.debug) {
+      console.error(`[debug] Google Imagen request: POST ${apiHost}${endpoint}`);
+      console.error('[debug] Google body:', JSON.stringify(body, null, 2));
+    }
+
+    const response = await fetch(`${apiHost}${endpoint}?key=${this.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Google Imagen API error (${response.status}): ${errText}`);
+    }
+
+    const result = await response.json() as { predictions: Array<{ bytesBase64Encoded: string; mimeType: string }> };
+
+    for (let i = 0; i < (result.predictions?.length || 0); i++) {
+      const prediction = result.predictions[i];
+      const buffer = Buffer.from(prediction.bytesBase64Encoded, 'base64');
+      const ext = prediction.mimeType === 'image/jpeg' ? 'jpeg' : 'png';
+      const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
+      await fs.writeFile(outputPath, buffer);
+      savedPaths.push(outputPath);
+    }
+
+    return model;
   }
 
   private simplifyRatio(w: number, h: number): string {

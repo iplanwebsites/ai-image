@@ -30,7 +30,11 @@
     "ai",
     "GPT",
     "dall-e",
-    "stable-diffusion"
+    "stable-diffusion",
+    "imagen",
+    "google",
+    "together-ai",
+    "black-forest-labs"
   ],
   "author": "",
   "license": "MIT",
