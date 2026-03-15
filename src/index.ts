@@ -888,19 +888,40 @@ export class ImageGenerator {
           '  Other:   curl -LsSf https://astral.sh/uv/install.sh | sh',
         );
       } else {
-        lines.push(
-          'Python and uv found, but ai-image-server is not installed.',
-          '',
-          'Set up the local server:',
-          `  cd ${serverDir}`,
-          '  uv venv && uv pip install -e .',
-        );
+        // Check if the bundled server/ dir exists (git clone / dev setup)
+        let hasServerDir = false;
+        try {
+          await fs.access(path.resolve(pkgDir, '..', 'server', 'pyproject.toml'));
+          hasServerDir = true;
+        } catch { /* not found */ }
+
+        if (hasServerDir) {
+          const serverDir = path.resolve(pkgDir, '..', 'server');
+          lines.push(
+            'Python and uv found, but the local server is not set up yet.',
+            '',
+            'Run this once to install:',
+            `  cd ${serverDir}`,
+            '  uv venv && uv pip install -e .',
+          );
+        } else {
+          lines.push(
+            'Python and uv found, but ai-image-server is not installed.',
+            '',
+            'Install with:',
+            '  uv tool install ai-image-local-python-server',
+            '',
+            'Or from source:',
+            '  git clone https://github.com/iplanwebsites/ai-image.git',
+            '  cd ai-image/server && uv venv && uv pip install -e .',
+          );
+        }
       }
 
       lines.push(
         '',
-        'The local provider requires a Python server running on Apple Silicon.',
-        'See: https://github.com/iplanwebsites/ai-image/tree/main/server',
+        'The local provider requires a Python server (Apple Silicon only).',
+        'More info: https://github.com/iplanwebsites/ai-image#local-provider',
       );
 
       throw new Error(lines.join('\n'));
