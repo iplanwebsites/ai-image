@@ -180,6 +180,32 @@ def main():
     _defaults = MODELS[args.model]["defaults"]
     _sleep_timeout = args.auto_sleep
 
+    # Check if model is already cached
+    from huggingface_hub import scan_cache_dir
+    spec = MODELS[args.model]
+    if "config" in spec:
+        from mflux.models.common.config.model_config import ModelConfig
+        model_name = getattr(ModelConfig, spec["config"])().model_name
+    else:
+        model_name = spec["class"].rsplit(".", 1)[1]
+
+    is_cached = False
+    try:
+        cache_info = scan_cache_dir()
+        is_cached = any(repo.repo_id == model_name for repo in cache_info.repos)
+    except Exception:
+        pass
+
+    if not is_cached:
+        print(f"")
+        print(f"  ┌─────────────────────────────────────────────────────┐")
+        print(f"  │  First run: downloading model weights (~8 GB).     │")
+        print(f"  │  This is a one-time download and may take a while. │")
+        print(f"  │  Model: {model_name:<42s} │")
+        print(f"  │  Cache: ~/.cache/huggingface/hub/                  │")
+        print(f"  └─────────────────────────────────────────────────────┘")
+        print(f"")
+
     print(f"Loading model: {args.model} (q{args.quantize})...")
     _model = load_model(args.model, args.quantize, None, None)
     print(f"Model loaded.")

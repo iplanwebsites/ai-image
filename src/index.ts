@@ -1008,7 +1008,7 @@ export class ImageGenerator {
     ImageGenerator.localServerProcess = proc;
 
     // Wait for server to be ready
-    const maxWait = 120_000;
+    const maxWait = 600_000; // 10 minutes (first-time model download can be slow)
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       if (procExited) {
