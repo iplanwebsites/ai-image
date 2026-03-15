@@ -1,6 +1,6 @@
 {
   "name": "ai-image",
-  "version": "0.1.0",
+  "version": "0.0.9",
   "description": "A unified wrapper for image generation inference APIs (OpenAI, Replicate, Stability AI, FAL.ai) with CLI support, useful for MCP and sub-processes",
   "type": "module",
   "main": "dist/index.js",

@@ -1,0 +1,9 @@
+{
+  "name": "AI Image Playground",
+  "short_name": "AI Image",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "description": "Generate images with 10+ AI providers"
+}

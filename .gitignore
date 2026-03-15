@@ -9,11 +9,14 @@ dist/
 .env.local
 .env.production
 
-# Generated images (for testing)
-*.png
-*.jpg
-*.jpeg
-*.webp
+# Generated images (root level only)
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+
+# API server output
+packages/api/output/
 
 # IDE
 .vscode/
@@ -47,3 +50,7 @@ __pycache__/
 
 # Copied server files in ai-image package
 packages/ai-image/server/
+
+
+DEV.md
+CLAUDE.md

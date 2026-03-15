@@ -3,7 +3,7 @@ name = "ai-image-local-python-server"
 version = "0.1.0"
 description = "Local image generation server for Apple Silicon (MFLUX + FLUX.2). Companion to the ai-image npm package."
 requires-python = ">=3.11"
-dependencies = ["mflux"]
+dependencies = ["mflux", "open-clip-torch"]
 
 [tool.setuptools]
 packages = ["ai_image_server"]

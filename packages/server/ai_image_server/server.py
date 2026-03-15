@@ -37,9 +37,11 @@ from pathlib import Path
 from threading import Lock, Timer
 
 from ai_image_server.cli import MODELS, load_model
+from ai_image_server.clip_model import classify_image, embed_image, embed_text
 
 _model = None
 _model_lock = Lock()
+_clip_lock = Lock()
 _defaults = {}
 _sleep_timer = None
 _sleep_timeout = None
@@ -75,14 +77,22 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json_response(404, {"error": "not found"})
 
+    def _read_json_body(self):
+        """Read and parse the JSON request body."""
+        length = int(self.headers.get("Content-Length", 0))
+        return json.loads(self.rfile.read(length)) if length else {}
+
     def do_POST(self):
+        if self.path == "/classify":
+            return self._handle_classify()
+        if self.path == "/embed":
+            return self._handle_embed()
         if self.path != "/generate":
             self._json_response(404, {"error": "not found"})
             return
 
         try:
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length)) if length else {}
+            body = self._read_json_body()
         except (json.JSONDecodeError, ValueError) as e:
             self._json_response(400, {"error": f"invalid JSON: {e}"})
             return
@@ -154,6 +164,77 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(png_bytes)
 
+    def _handle_classify(self):
+        """POST /classify — zero-shot image classification."""
+        try:
+            body = self._read_json_body()
+        except (json.JSONDecodeError, ValueError) as e:
+            self._json_response(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        image_path = body.get("image_path")
+        labels = body.get("labels")
+        if not image_path:
+            self._json_response(400, {"error": "image_path is required"})
+            return
+        if not labels or not isinstance(labels, list):
+            self._json_response(400, {"error": "labels is required (array of strings)"})
+            return
+
+        self.log_message(f"Classifying: {image_path!r} against {len(labels)} labels")
+        start = time.time()
+
+        with _clip_lock:
+            try:
+                results = classify_image(image_path, labels)
+            except FileNotFoundError:
+                self._json_response(404, {"error": f"image not found: {image_path}"})
+                return
+            except Exception as e:
+                self._json_response(500, {"error": str(e)})
+                return
+
+        elapsed = time.time() - start
+        self.log_message(f"Classified in {elapsed:.2f}s")
+        _reset_sleep_timer()
+        self._json_response(200, {"labels": results, "elapsed": round(elapsed, 3)})
+
+    def _handle_embed(self):
+        """POST /embed — get CLIP embedding for an image or text."""
+        try:
+            body = self._read_json_body()
+        except (json.JSONDecodeError, ValueError) as e:
+            self._json_response(400, {"error": f"invalid JSON: {e}"})
+            return
+
+        image_path = body.get("image_path")
+        text = body.get("text")
+        if not image_path and not text:
+            self._json_response(400, {"error": "image_path or text is required"})
+            return
+
+        start = time.time()
+
+        with _clip_lock:
+            try:
+                if image_path:
+                    self.log_message(f"Embedding image: {image_path!r}")
+                    embedding = embed_image(image_path)
+                else:
+                    self.log_message(f"Embedding text: {text!r}")
+                    embedding = embed_text(text)
+            except FileNotFoundError:
+                self._json_response(404, {"error": f"image not found: {image_path}"})
+                return
+            except Exception as e:
+                self._json_response(500, {"error": str(e)})
+                return
+
+        elapsed = time.time() - start
+        self.log_message(f"Embedded in {elapsed:.2f}s")
+        _reset_sleep_timer()
+        self._json_response(200, {"embedding": embedding, "elapsed": round(elapsed, 3)})
+
     def _json_response(self, code: int, data: dict):
         body = json.dumps(data).encode()
         self.send_response(code)
@@ -213,6 +294,8 @@ def main():
     _server = HTTPServer((args.host, args.port), Handler)
     print(f"Listening on http://{args.host}:{args.port}")
     print(f"  POST /generate  - generate an image")
+    print(f"  POST /classify  - zero-shot image classification (CLIP)")
+    print(f"  POST /embed     - get CLIP embedding (image or text)")
     print(f"  GET  /health    - health check")
     if _sleep_timeout:
         print(f"  Auto-sleep after {_sleep_timeout}s of inactivity")
