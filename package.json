@@ -1,71 +1,13 @@
 {
-  "name": "ai-image",
-  "version": "0.1.0",
-  "description": "A unified wrapper for image generation inference APIs (OpenAI, Replicate, Stability AI, FAL.ai) with CLI support, useful for MCP and sub-processes",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "server/ai_image_server/*.py",
-    "server/pyproject.toml",
-    "server/README.md"
-  ],
-  "bin": {
-    "ai-image": "dist/cli.js"
-  },
+  "name": "ai-image-monorepo",
+  "private": true,
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/cli.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "dev": "turbo run dev"
   },
-  "keywords": [
-    "image-generation",
-    "openai",
-    "replicate",
-    "stability-ai",
-    "fal",
-    "flux",
-    "cli",
-    "ai",
-    "GPT",
-    "dall-e",
-    "stable-diffusion",
-    "imagen",
-    "google",
-    "together-ai",
-    "black-forest-labs",
-    "fireworks",
-    "ollama",
-    "local"
-  ],
-  "author": "",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/iplanwebsites/ai-image.git"
-  },
-  "dependencies": {
-    "commander": "^11.1.0",
-    "dotenv": "^16.3.1",
-    "openai": "^4.24.0",
-    "replicate": "^0.25.0"
-  },
+  "packageManager": "pnpm@10.29.3",
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "tsx": "^4.6.0",
-    "typescript": "^5.3.0",
-    "vitest": "^4.1.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "turbo": "^2"
   }
 }

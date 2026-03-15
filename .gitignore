@@ -37,6 +37,13 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
+# Python
+.venv/
+__pycache__/
+*.egg-info/
 
+# Turbo
+.turbo/
 
-DEV.md
+# Copied server files in ai-image package
+packages/ai-image/server/
