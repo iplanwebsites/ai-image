@@ -11,6 +11,12 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "server/ai_image_server",
+    "server/pyproject.toml",
+    "server/README.md"
+  ],
   "bin": {
     "ai-image": "dist/cli.js"
   },

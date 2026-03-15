@@ -794,8 +794,18 @@ export class ImageGenerator {
   }
 
   // ─── Local (ai-image-server) ──────────────────────────────────────
+  //
+  // Global install at ~/.ai-image/:
+  //   ~/.ai-image/
+  //     server/.venv/         — single Python venv, shared across all projects
+  //     models/               — HuggingFace model cache (explicit location)
+  //     version.json          — tracks npm package version for auto-upgrade
+  //
+  // Models are stored via HF_HUB_CACHE=~/.ai-image/models so they're
+  // visible, shared, and easy to clean up (rm -rf ~/.ai-image).
 
   private static localServerProcess: ChildProcess | null = null;
+  private static readonly AI_IMAGE_HOME = path.join(process.env.HOME || process.env.USERPROFILE || '~', '.ai-image');
 
   private getLocalHost(): string {
     const isCustomHost = this.apiKey && this.apiKey.startsWith('http');
@@ -811,120 +821,161 @@ export class ImageGenerator {
     }
   }
 
+  /** Locate the bundled server/ source (works from dist/ or src/) */
+  private getServerSourceDir(): string {
+    const pkgDir = path.dirname(new URL(import.meta.url).pathname);
+    return path.resolve(pkgDir, '..', 'server');
+  }
+
+  /** Read the npm package version from package.json */
+  private async getPackageVersion(): Promise<string> {
+    const pkgDir = path.dirname(new URL(import.meta.url).pathname);
+    try {
+      const raw = await fs.readFile(path.resolve(pkgDir, '..', 'package.json'), 'utf-8');
+      return JSON.parse(raw).version || '0.0.0';
+    } catch {
+      return '0.0.0';
+    }
+  }
+
+  /** Check if the global install needs to be (re)created */
+  private async needsInstall(): Promise<boolean> {
+    const home = ImageGenerator.AI_IMAGE_HOME;
+    const venvBin = path.join(home, 'server', '.venv', 'bin', 'ai-image-server');
+    const versionFile = path.join(home, 'version.json');
+
+    // No venv at all
+    const hasVenv = await fs.access(venvBin).then(() => true, () => false);
+    if (!hasVenv) return true;
+
+    // Version mismatch
+    const currentVersion = await this.getPackageVersion();
+    try {
+      const raw = await fs.readFile(versionFile, 'utf-8');
+      const { version } = JSON.parse(raw);
+      return version !== currentVersion;
+    } catch {
+      return true; // no version file = needs install
+    }
+  }
+
+  /** Install or upgrade the server in ~/.ai-image/ */
+  private async installServer(debug?: boolean): Promise<void> {
+    const { execSync } = await import('child_process');
+    const home = ImageGenerator.AI_IMAGE_HOME;
+    const sourceDir = this.getServerSourceDir();
+    const targetDir = path.join(home, 'server');
+
+    // Verify source exists
+    const hasSource = await fs.access(path.join(sourceDir, 'pyproject.toml')).then(() => true, () => false);
+    if (!hasSource) {
+      throw new Error(
+        '[ai-image] Server source not found in the ai-image package.\n' +
+        'Reinstall: npm install ai-image'
+      );
+    }
+
+    // Check for Python
+    const hasPython = (() => {
+      try { execSync('which python3 2>/dev/null'); return true; } catch { return false; }
+    })();
+    if (!hasPython) {
+      throw new Error(
+        '[ai-image] Python 3.11+ is required for local image generation.\n\n' +
+        'Install Python:\n' +
+        '  macOS:   brew install python@3.13\n' +
+        '  Ubuntu:  sudo apt install python3\n' +
+        '  Windows: https://www.python.org/downloads/'
+      );
+    }
+
+    // Check for uv (preferred) or fall back to pip
+    const uvPath = (() => {
+      try { return execSync('which uv 2>/dev/null', { encoding: 'utf-8' }).trim(); } catch { return null; }
+    })();
+
+    console.error('[ai-image] Setting up local image generation server...');
+    console.error(`[ai-image] Install location: ${home}`);
+
+    // Create dirs
+    await fs.mkdir(targetDir, { recursive: true });
+
+    // Copy server source to ~/.ai-image/server/
+    // (copy pyproject.toml + ai_image_server/ package)
+    const serverPkgDir = path.join(targetDir, 'ai_image_server');
+    await fs.mkdir(serverPkgDir, { recursive: true });
+
+    // Copy pyproject.toml
+    await fs.copyFile(path.join(sourceDir, 'pyproject.toml'), path.join(targetDir, 'pyproject.toml'));
+
+    // Copy only .py files from source (skip __pycache__ etc)
+    const sourceFiles = await fs.readdir(path.join(sourceDir, 'ai_image_server'));
+    for (const file of sourceFiles) {
+      if (!file.endsWith('.py')) continue;
+      await fs.copyFile(
+        path.join(sourceDir, 'ai_image_server', file),
+        path.join(serverPkgDir, file),
+      );
+    }
+
+    // Create venv and install
+    try {
+      if (uvPath) {
+        if (debug) console.error('[debug] Installing with uv');
+        execSync(`${uvPath} venv`, { cwd: targetDir, stdio: debug ? 'inherit' : 'pipe' });
+        execSync(`${uvPath} pip install -e .`, { cwd: targetDir, stdio: debug ? 'inherit' : 'pipe' });
+      } else {
+        if (debug) console.error('[debug] Installing with pip (uv not found)');
+        execSync('python3 -m venv .venv', { cwd: targetDir, stdio: debug ? 'inherit' : 'pipe' });
+        execSync('.venv/bin/pip install -e .', { cwd: targetDir, stdio: debug ? 'inherit' : 'pipe' });
+      }
+    } catch (e) {
+      throw new Error(
+        `[ai-image] Failed to install the local server.\n\n` +
+        (uvPath
+          ? `Install uv for faster setup: brew install uv\n\n`
+          : '') +
+        `Try manually:\n` +
+        `  cd ${targetDir}\n` +
+        `  ${uvPath ? 'uv venv && uv pip install -e .' : 'python3 -m venv .venv && .venv/bin/pip install -e .'}\n\n` +
+        `Error: ${e instanceof Error ? e.message : e}`
+      );
+    }
+
+    // Write version file
+    const version = await this.getPackageVersion();
+    await fs.writeFile(
+      path.join(home, 'version.json'),
+      JSON.stringify({ version, installedAt: new Date().toISOString() }, null, 2),
+    );
+
+    console.error('[ai-image] Server installed successfully.');
+    console.error('[ai-image] Models cached in: ~/.cache/huggingface/hub/');
+  }
+
   private async startLocalServer(apiHost: string, debug?: boolean): Promise<void> {
     if (ImageGenerator.localServerProcess) return;
 
     const url = new URL(apiHost);
     const port = url.port || '8506';
+    const home = ImageGenerator.AI_IMAGE_HOME;
 
-    // Try to find ai-image-server, checking the bundled server/ venv first
-    const { execSync } = await import('child_process');
-    const pkgDir = path.dirname(new URL(import.meta.url).pathname);
-    let cmd: string | null = null;
-    let args: string[] = [];
-
-    // 1. Check server/.venv in the package directory (dev / linked installs)
-    const venvBin = path.resolve(pkgDir, '..', 'server', '.venv', 'bin', 'ai-image-server');
-    try {
-      await fs.access(venvBin);
-      cmd = venvBin;
-      args = ['--port', port, '--auto-sleep', '300'];
-    } catch { /* not found */ }
-
-    // 2. Check if ai-image-server is on PATH
-    if (!cmd) {
-      try {
-        const which = execSync('which ai-image-server 2>/dev/null', { encoding: 'utf-8' }).trim();
-        if (which) {
-          cmd = which;
-          args = ['--port', port, '--auto-sleep', '300'];
-        }
-      } catch { /* not found */ }
+    // Install or upgrade if needed
+    if (await this.needsInstall()) {
+      await this.installServer(debug);
     }
 
-    // 3. Fallback: try python -m
-    if (!cmd) {
-      for (const py of ['python3', 'python']) {
-        try {
-          const which = execSync(`which ${py} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-          // Verify the module is importable
-          execSync(`${which} -c "import ai_image_server" 2>/dev/null`);
-          cmd = which;
-          args = ['-m', 'ai_image_server.server', '--port', port, '--auto-sleep', '300'];
-          break;
-        } catch { /* not found */ }
-      }
-    }
+    const cmd = path.join(home, 'server', '.venv', 'bin', 'ai-image-server');
+    const args = ['--port', port, '--auto-sleep', '300'];
 
-    // If nothing found, give a clear diagnostic
-    if (!cmd) {
-      const hasPython = (() => {
-        try { execSync('which python3 2>/dev/null'); return true; } catch { return false; }
-      })();
-      const hasUv = (() => {
-        try { execSync('which uv 2>/dev/null'); return true; } catch { return false; }
-      })();
-
-      const serverDir = path.resolve(pkgDir, '..', 'server');
-      const lines = [
-        '[ai-image] Cannot start local image generation server.\n',
-      ];
-
-      if (!hasPython) {
-        lines.push(
-          'Python 3.11+ is required but not found.',
-          '',
-          'Install Python:',
-          '  macOS:   brew install python@3.13',
-          '  Ubuntu:  sudo apt install python3',
-          '  Windows: https://www.python.org/downloads/',
-        );
-      } else if (!hasUv) {
-        lines.push(
-          'Python found, but uv (package manager) is not installed.',
-          '',
-          'Install uv:',
-          '  macOS:   brew install uv',
-          '  Other:   curl -LsSf https://astral.sh/uv/install.sh | sh',
-        );
-      } else {
-        // Check if the bundled server/ dir exists (git clone / dev setup)
-        let hasServerDir = false;
-        try {
-          await fs.access(path.resolve(pkgDir, '..', 'server', 'pyproject.toml'));
-          hasServerDir = true;
-        } catch { /* not found */ }
-
-        if (hasServerDir) {
-          const serverDir = path.resolve(pkgDir, '..', 'server');
-          lines.push(
-            'Python and uv found, but the local server is not set up yet.',
-            '',
-            'Run this once to install:',
-            `  cd ${serverDir}`,
-            '  uv venv && uv pip install -e .',
-          );
-        } else {
-          lines.push(
-            'Python and uv found, but ai-image-server is not installed.',
-            '',
-            'Install with:',
-            '  uv tool install ai-image-local-python-server',
-            '',
-            'Or from source:',
-            '  git clone https://github.com/iplanwebsites/ai-image.git',
-            '  cd ai-image/server && uv venv && uv pip install -e .',
-          );
-        }
-      }
-
-      lines.push(
-        '',
-        'The local provider requires a Python server (Apple Silicon only).',
-        'More info: https://github.com/iplanwebsites/ai-image#local-provider',
+    // Verify binary exists
+    const hasBin = await fs.access(cmd).then(() => true, () => false);
+    if (!hasBin) {
+      throw new Error(
+        `[ai-image] Server binary not found at ${cmd}\n` +
+        `Try removing ~/.ai-image and running again:\n` +
+        `  rm -rf ~/.ai-image`
       );
-
-      throw new Error(lines.join('\n'));
     }
 
     if (debug) {
@@ -937,9 +988,9 @@ export class ImageGenerator {
     const proc = spawn(cmd, args, {
       stdio: debug ? 'inherit' : ['ignore', 'ignore', 'pipe'],
       detached: true,
+      env: process.env,
     });
 
-    // Capture stderr if not in debug mode (to show errors)
     if (!debug && proc.stderr) {
       const chunks: Buffer[] = [];
       proc.stderr.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -956,17 +1007,16 @@ export class ImageGenerator {
     proc.unref();
     ImageGenerator.localServerProcess = proc;
 
-    // Wait for server to be ready (model loading can take a while)
-    const maxWait = 120_000; // 2 minutes for model download/load
+    // Wait for server to be ready
+    const maxWait = 120_000;
     const start = Date.now();
     while (Date.now() - start < maxWait) {
-      // Early exit if the process crashed
       if (procExited) {
         ImageGenerator.localServerProcess = null;
         throw new Error(
           `[ai-image] Local server failed to start.\n` +
           (procError ? `Server output: ${procError}\n` : '') +
-          `\nTry running it manually to see the full error:\n  ${cmd} ${args.join(' ')}`
+          `\nTry running manually:\n  ${cmd} ${args.join(' ')}`
         );
       }
 
@@ -980,13 +1030,13 @@ export class ImageGenerator {
     throw new Error(
       `[ai-image] Local server started but not ready after ${maxWait / 1000}s.\n` +
       'The model may still be downloading on first run.\n' +
-      `Try running it manually: ${cmd} ${args.join(' ')}`
+      `Try running manually: ${cmd} ${args.join(' ')}`
     );
   }
 
   private async ensureLocalServer(apiHost: string, debug?: boolean): Promise<void> {
     if (await this.isLocalServerRunning(apiHost)) return;
-    console.error('Local server not running, starting automatically (this may take a moment on first run)...');
+    console.error('[ai-image] Starting local server (auto-sleeps after 5 min idle)...');
     await this.startLocalServer(apiHost, debug);
   }
 
