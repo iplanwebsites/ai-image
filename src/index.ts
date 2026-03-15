@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import Replicate from 'replicate';
 import fs from 'fs/promises';
 import path from 'path';
+import { spawn, ChildProcess } from 'child_process';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -794,11 +795,113 @@ export class ImageGenerator {
 
   // ─── Local (ai-image-server) ──────────────────────────────────────
 
+  private static localServerProcess: ChildProcess | null = null;
+
+  private getLocalHost(): string {
+    const isCustomHost = this.apiKey && this.apiKey.startsWith('http');
+    return isCustomHost ? this.apiKey! : (process.env.AI_IMAGE_LOCAL_URL || 'http://localhost:8506');
+  }
+
+  private async isLocalServerRunning(apiHost: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${apiHost}/health`, { signal: AbortSignal.timeout(2000) });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async startLocalServer(apiHost: string, debug?: boolean): Promise<void> {
+    if (ImageGenerator.localServerProcess) return;
+
+    const url = new URL(apiHost);
+    const port = url.port || '8506';
+
+    // Try to find ai-image-server, checking the bundled server/ venv first
+    const { execSync } = await import('child_process');
+    const pkgDir = path.dirname(new URL(import.meta.url).pathname);
+    let cmd: string | null = null;
+    let args: string[] = [];
+
+    // 1. Check server/.venv in the package directory (dev / linked installs)
+    const venvBin = path.resolve(pkgDir, '..', 'server', '.venv', 'bin', 'ai-image-server');
+    try {
+      await fs.access(venvBin);
+      cmd = venvBin;
+      args = ['--port', port, '--auto-sleep', '300'];
+    } catch { /* not found */ }
+
+    // 2. Check if ai-image-server is on PATH
+    if (!cmd) {
+      try {
+        const which = execSync('which ai-image-server 2>/dev/null', { encoding: 'utf-8' }).trim();
+        if (which) {
+          cmd = which;
+          args = ['--port', port, '--auto-sleep', '300'];
+        }
+      } catch { /* not found */ }
+    }
+
+    // 3. Fallback: try python -m
+    if (!cmd) {
+      for (const py of ['python3', 'python']) {
+        try {
+          const which = execSync(`which ${py} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+          // Verify the module is importable
+          execSync(`${which} -c "import ai_image_server" 2>/dev/null`);
+          cmd = which;
+          args = ['-m', 'ai_image_server.server', '--port', port, '--auto-sleep', '300'];
+          break;
+        } catch { /* not found */ }
+      }
+    }
+
+    if (!cmd) {
+      throw new Error(
+        'Cannot auto-start local server: ai-image-server not found.\n' +
+        'Install it with: cd server && uv venv && uv pip install -e .'
+      );
+    }
+
+    if (debug) {
+      console.error(`[debug] Starting local server: ${cmd} ${args.join(' ')}`);
+    }
+
+    const proc = spawn(cmd, args, {
+      stdio: debug ? 'inherit' : 'ignore',
+      detached: true,
+    });
+    proc.unref();
+    ImageGenerator.localServerProcess = proc;
+
+    // Wait for server to be ready (model loading can take a while)
+    const maxWait = 120_000; // 2 minutes for model download/load
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      if (await this.isLocalServerRunning(apiHost)) {
+        if (debug) console.error('[debug] Local server is ready');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    throw new Error(
+      `Local server started but not ready after ${maxWait / 1000}s. ` +
+      'The model may still be downloading. Try again or start the server manually.'
+    );
+  }
+
+  private async ensureLocalServer(apiHost: string, debug?: boolean): Promise<void> {
+    if (await this.isLocalServerRunning(apiHost)) return;
+    console.error('Local server not running, starting automatically (this may take a moment on first run)...');
+    await this.startLocalServer(apiHost, debug);
+  }
+
   private async generateLocal(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
     const model = options.model || 'flux2-klein-4b';
-    // Support custom host via env or apiKey field
-    const isCustomHost = this.apiKey && this.apiKey.startsWith('http');
-    const apiHost = isCustomHost ? this.apiKey! : (process.env.AI_IMAGE_LOCAL_URL || 'http://localhost:8506');
+    const apiHost = this.getLocalHost();
+
+    await this.ensureLocalServer(apiHost, options.debug);
 
     const size = options.size || '512x512';
     const [w, h] = size.split('x').map(Number);
@@ -821,25 +924,15 @@ export class ImageGenerator {
 
     const n = options.n || 1;
     for (let i = 0; i < n; i++) {
-      // Each request needs a unique seed if generating multiple
       if (n > 1 && options.seed != null) {
         body.seed = options.seed + i;
       }
 
-      let response: Response;
-      try {
-        response = await fetch(`${apiHost}/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-      } catch (err) {
-        throw new Error(
-          `Local server not reachable at ${apiHost}. ` +
-          `Start it with: ai-image-server (from ai-image-local-python-server package). ` +
-          `Original error: ${err instanceof Error ? err.message : err}`
-        );
-      }
+      const response = await fetch(`${apiHost}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
 
       if (!response.ok) {
         const errText = await response.text();
@@ -849,14 +942,12 @@ export class ImageGenerator {
       const contentType = response.headers.get('Content-Type') || '';
 
       if (contentType.includes('image/')) {
-        // Server returned PNG bytes directly
         const buffer = Buffer.from(await response.arrayBuffer());
         const ext = options.format || 'png';
         const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
         await fs.writeFile(outputPath, buffer);
         savedPaths.push(outputPath);
       } else {
-        // Server saved to disk and returned JSON
         const result = await response.json() as { output?: string; status?: string };
         if (result.output) {
           savedPaths.push(result.output);
