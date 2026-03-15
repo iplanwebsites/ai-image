@@ -13,7 +13,7 @@
   },
   "files": [
     "dist",
-    "server/ai_image_server",
+    "server/ai_image_server/*.py",
     "server/pyproject.toml",
     "server/README.md"
   ],
