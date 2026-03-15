@@ -18,6 +18,7 @@ interface GenerateBody {
   steps?: number;
   seed?: number;
   stylePreset?: string;
+  outputDir?: string;
 }
 
 interface RouteOptions {
@@ -45,6 +46,7 @@ export async function generateRoute(app: FastifyInstance, opts: RouteOptions) {
           steps: { type: 'number' },
           seed: { type: 'number' },
           stylePreset: { type: 'string' },
+          outputDir: { type: 'string' },
         },
       },
     },
@@ -55,11 +57,14 @@ export async function generateRoute(app: FastifyInstance, opts: RouteOptions) {
     // Use UUID-based filenames for clean URLs
     const filename = randomUUID();
 
+    // Use custom output dir if provided, otherwise default
+    const outputDir = body.outputDir || opts.outputDir;
+
     let generator: ImageGenerator;
     try {
       generator = new ImageGenerator({
         provider,
-        outputDir: opts.outputDir,
+        outputDir,
         outputFilename: filename,
       });
     } catch (err) {
@@ -85,18 +90,20 @@ export async function generateRoute(app: FastifyInstance, opts: RouteOptions) {
         steps: body.steps,
         seed: body.seed,
         stylePreset: body.stylePreset,
-        outputDir: opts.outputDir,
+        outputDir,
         outputFilename: filename,
       };
 
       const result = await generator.generate(generateOpts);
 
-      // Map file paths to URLs
+      // Map file paths to URLs (only serveable if in default output dir)
       const images = result.filePaths.map((filePath) => {
         const basename = path.basename(filePath);
+        const isInDefaultDir = path.resolve(path.dirname(filePath)) === path.resolve(opts.outputDir);
         return {
-          url: `/images/${basename}`,
+          url: isInDefaultDir ? `/images/${basename}` : null,
           filename: basename,
+          filePath,
         };
       });
 
@@ -107,6 +114,7 @@ export async function generateRoute(app: FastifyInstance, opts: RouteOptions) {
         model: result.model,
         elapsed: result.elapsed,
         prompt: body.prompt,
+        outputDir,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';

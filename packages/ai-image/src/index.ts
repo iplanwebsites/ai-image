@@ -41,12 +41,39 @@ export interface GenerateOptions {
   steps?: number;
   // Seed for reproducibility
   seed?: number;
+  // Write a metadata.json sidecar file alongside each image.
+  // Includes generation params and CLIP embedding when the local server is available.
+  metadata?: boolean;
+  // Labels for CLIP classification (included in metadata when provided)
+  metadataLabels?: string[];
 }
 
 export interface GenerateResult {
   filePaths: string[];
   provider: Provider;
   model: string;
+  elapsed: number;
+}
+
+export interface ClassifyOptions {
+  imagePath: string;
+  labels: string[];
+  debug?: boolean;
+}
+
+export interface ClassifyResult {
+  labels: Array<{ label: string; score: number }>;
+  elapsed: number;
+}
+
+export interface EmbedOptions {
+  imagePath?: string;
+  text?: string;
+  debug?: boolean;
+}
+
+export interface EmbedResult {
+  embedding: number[];
   elapsed: number;
 }
 
@@ -217,15 +244,86 @@ export class ImageGenerator {
           break;
       }
 
-      return {
+      const result: GenerateResult = {
         filePaths: savedPaths,
         provider: this.provider,
         model: usedModel,
         elapsed: Date.now() - startTime,
       };
+
+      // Write metadata sidecar JSON for each image
+      if (options.metadata && savedPaths.length > 0) {
+        await this.writeMetadata(savedPaths, options, result);
+      }
+
+      return result;
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`[AI-IMAGE] Image generation failed (${this.provider}): ${msg}`);
+    }
+  }
+
+  private async writeMetadata(savedPaths: string[], options: GenerateOptions, result: GenerateResult): Promise<void> {
+    for (const imagePath of savedPaths) {
+      const meta: Record<string, unknown> = {
+        image: path.basename(imagePath),
+        provider: result.provider,
+        model: result.model,
+        prompt: options.prompt,
+        size: options.size,
+        quality: options.quality,
+        format: options.format,
+        seed: options.seed,
+        steps: options.steps,
+        guidanceScale: options.guidanceScale,
+        negativePrompt: options.negativePrompt,
+        elapsed: result.elapsed,
+        generatedAt: new Date().toISOString(),
+      };
+
+      // Remove undefined values
+      for (const key of Object.keys(meta)) {
+        if (meta[key] === undefined) delete meta[key];
+      }
+
+      // Start local server if needed, then add CLIP data
+      try {
+        const apiHost = process.env.AI_IMAGE_LOCAL_URL || 'http://localhost:8506';
+        await this.ensureLocalServer(apiHost, options.debug);
+
+        // Embedding
+        const embedRes = await fetch(`${apiHost}/embed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_path: imagePath }),
+        });
+        if (embedRes.ok) {
+          const embedData = await embedRes.json() as EmbedResult;
+          meta.clip = { embedding: embedData.embedding };
+        }
+
+        // Classification (if labels provided)
+        if (options.metadataLabels && options.metadataLabels.length > 0) {
+          const classifyRes = await fetch(`${apiHost}/classify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_path: imagePath, labels: options.metadataLabels }),
+          });
+          if (classifyRes.ok) {
+            const classifyData = await classifyRes.json() as ClassifyResult;
+            (meta.clip as Record<string, unknown>).labels = classifyData.labels;
+          }
+        }
+      } catch {
+        // Local server unavailable (e.g. no Python) — metadata still written without CLIP
+      }
+
+      const metaPath = imagePath.replace(/\.[^.]+$/, '.metadata.json');
+      await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
+
+      if (options.debug) {
+        console.error(`[debug] Metadata saved: ${metaPath}`);
+      }
     }
   }
 
@@ -1101,6 +1199,56 @@ export class ImageGenerator {
     return model;
   }
 
+  // ─── CLIP: Classify & Embed ──────────────────────────────────────
+
+  async classifyImage(options: ClassifyOptions): Promise<ClassifyResult> {
+    const apiHost = this.getLocalHost();
+    await this.ensureLocalServer(apiHost, options.debug);
+
+    if (options.debug) {
+      console.error(`[debug] POST ${apiHost}/classify`);
+    }
+
+    const response = await fetch(`${apiHost}/classify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_path: options.imagePath, labels: options.labels }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`[AI-IMAGE] Classification failed: ${errText}`);
+    }
+
+    return await response.json() as ClassifyResult;
+  }
+
+  async embed(options: EmbedOptions): Promise<EmbedResult> {
+    const apiHost = this.getLocalHost();
+    await this.ensureLocalServer(apiHost, options.debug);
+
+    const body: Record<string, unknown> = {};
+    if (options.imagePath) body.image_path = options.imagePath;
+    if (options.text) body.text = options.text;
+
+    if (options.debug) {
+      console.error(`[debug] POST ${apiHost}/embed`);
+    }
+
+    const response = await fetch(`${apiHost}/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`[AI-IMAGE] Embedding failed: ${errText}`);
+    }
+
+    return await response.json() as EmbedResult;
+  }
+
   private simplifyRatio(w: number, h: number): string {
     const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
     const d = gcd(w, h);
@@ -1121,6 +1269,33 @@ export async function generateImage(
     outputDir: options.outputDir,
   });
   return generator.generate({ prompt, ...options });
+}
+
+// ─── Convenience functions for one-shot CLIP operations ───────────────
+
+export async function classifyImage(
+  imagePath: string,
+  labels: string[],
+  options: { debug?: boolean } = {}
+): Promise<ClassifyResult> {
+  const generator = new ImageGenerator({ provider: 'local' });
+  return generator.classifyImage({ imagePath, labels, debug: options.debug });
+}
+
+export async function embedImage(
+  imagePath: string,
+  options: { debug?: boolean } = {}
+): Promise<EmbedResult> {
+  const generator = new ImageGenerator({ provider: 'local' });
+  return generator.embed({ imagePath, debug: options.debug });
+}
+
+export async function embedText(
+  text: string,
+  options: { debug?: boolean } = {}
+): Promise<EmbedResult> {
+  const generator = new ImageGenerator({ provider: 'local' });
+  return generator.embed({ text, debug: options.debug });
 }
 
 // Re-export types and SDK classes

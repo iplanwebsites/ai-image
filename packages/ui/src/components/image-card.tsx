@@ -7,19 +7,45 @@ import {
   DialogDescription,
 } from './ui/dialog.js';
 import { Button } from './ui/button.js';
-import { Download, Maximize2 } from 'lucide-react';
+import { Download, Maximize2, FileImage } from 'lucide-react';
 
 interface ImageCardProps {
-  url: string;
+  url: string | null;
   filename: string;
+  filePath: string;
   provider: string;
   model: string;
   elapsed: number;
   prompt: string;
 }
 
-export function ImageCard({ url, filename, provider, model, elapsed, prompt }: ImageCardProps) {
+export function ImageCard({ url, filename, filePath, provider, model, elapsed, prompt }: ImageCardProps) {
   const [showFullscreen, setShowFullscreen] = React.useState(false);
+
+  // If no URL (saved to custom dir), show a file path card instead
+  if (!url) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-center aspect-square bg-muted/30">
+          <div className="text-center space-y-2 p-4">
+            <FileImage className="h-10 w-10 text-muted-foreground mx-auto" />
+            <p className="text-xs font-mono text-muted-foreground break-all">{filePath}</p>
+          </div>
+        </div>
+        <div className="p-3 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {provider} / {model}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {(elapsed / 1000).toFixed(1)}s
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate">{prompt}</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <>

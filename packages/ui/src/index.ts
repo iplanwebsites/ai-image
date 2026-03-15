@@ -23,6 +23,8 @@ export { GenerationSettings, type GenerationSettingsValues } from './components/
 export { ImageCard } from './components/image-card.js';
 export { ImageGrid } from './components/image-grid.js';
 export { GenerationStatus } from './components/generation-status.js';
+export { OutputDirInput } from './components/output-dir-input.js';
+export { ClipPanel, EmbeddingViewer, ClassifyPanel, SearchPanel } from './components/clip-panel.js';
 
 // Utilities
 export { cn } from './lib/utils.js';

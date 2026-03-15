@@ -1,21 +1,22 @@
 # ai-image-local-python-server
 
-Local image generation HTTP server for Apple Silicon. Uses [MFLUX](https://github.com/filipstrand/mflux) (native MLX) with FLUX.2 Klein 4B.
+Local image generation + CLIP vision server for Apple Silicon. Uses [MFLUX](https://github.com/filipstrand/mflux) (native MLX) for image generation and Apple's [MobileCLIP-S1](https://huggingface.co/apple/MobileCLIP-S1-OpenCLIP) for fast CLIP embeddings and zero-shot classification.
 
 This is the local backend for the [`ai-image`](https://www.npmjs.com/package/ai-image) npm package's `local` provider.
 
 ## How it works
 
 ```
-POST /generate ──> [MFLUX] ──> [FLUX.2 Klein 4B on MLX] ──> PNG response
+POST /generate  ──> [MFLUX] ──> [FLUX.2 Klein 4B on MLX] ──> PNG response
+POST /classify  ──> [MobileCLIP-S1] ──> zero-shot classification scores
+POST /embed     ──> [MobileCLIP-S1] ──> 512-dim embedding vector
                       │
                       ├── runs natively on Apple Silicon (no CUDA needed)
                       ├── model weights cached in ~/.cache/huggingface/hub/
-                      └── quantization (q4/q8) reduces RAM and disk usage
+                      └── CLIP model loads lazily on first classify/embed request
 ```
 
-The server loads the model once into Apple Silicon unified memory, then processes
-requests sequentially. Each 512x512 image takes ~21s to generate.
+The generation model loads at startup into Apple Silicon unified memory. The CLIP model (MobileCLIP-S1, ~85MB) loads lazily on first `/classify` or `/embed` request and stays in memory. CLIP and generation use separate locks so they don't block each other.
 
 With `--auto-sleep`, the server shuts down after a period of inactivity — useful
 when auto-started by the `ai-image` npm package on first request.
@@ -78,6 +79,49 @@ Request body (only `prompt` is required):
 
 - If `output` is set, saves to disk and returns JSON. Refuses to overwrite (409).
 - If `output` is omitted, returns raw PNG bytes with seed/timing in headers.
+
+**`POST /classify`** — zero-shot image classification (CLIP)
+
+```bash
+curl -X POST http://localhost:8506/classify \
+  -H "Content-Type: application/json" \
+  -d '{"image_path": "/path/to/photo.jpg", "labels": ["cat", "dog", "bird"]}'
+# {"labels": [{"label": "cat", "score": 0.95}, {"label": "dog", "score": 0.04}, ...], "elapsed": 0.06}
+```
+
+Request body:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image_path` | string | yes | Absolute path to image file |
+| `labels` | string[] | yes | Text labels to classify against |
+
+Returns softmax probabilities (scores sum to 1), sorted highest first.
+
+**`POST /embed`** — get CLIP embedding for an image or text
+
+```bash
+# Image embedding
+curl -X POST http://localhost:8506/embed \
+  -H "Content-Type: application/json" \
+  -d '{"image_path": "/path/to/photo.jpg"}'
+
+# Text embedding
+curl -X POST http://localhost:8506/embed \
+  -H "Content-Type: application/json" \
+  -d '{"text": "a photo of a sunset"}'
+
+# {"embedding": [0.01, -0.03, ...], "elapsed": 0.05}
+```
+
+Request body (one of `image_path` or `text` required):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image_path` | string | no | Absolute path to image file |
+| `text` | string | no | Text to embed |
+
+Returns a 512-dimensional normalized embedding vector. Image and text embeddings are in the same space — use dot product for cosine similarity.
 
 **`GET /health`** — health check
 

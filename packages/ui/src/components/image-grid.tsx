@@ -1,7 +1,7 @@
 import { ImageCard } from './image-card.js';
 
 interface GenerationResult {
-  images: Array<{ url: string; filename: string }>;
+  images: Array<{ url: string | null; filename: string; filePath: string }>;
   provider: string;
   model: string;
   elapsed: number;
@@ -34,7 +34,7 @@ export function ImageGrid({ results }: ImageGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {allImages.map((img, i) => (
-        <ImageCard key={`${img.url}-${i}`} {...img} />
+        <ImageCard key={`${img.filePath}-${i}`} {...img} />
       ))}
     </div>
   );

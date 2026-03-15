@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { ImageGenerator, Provider, GenerateResult } from './index.js';
+import { ImageGenerator, Provider, GenerateResult, ClassifyResult, EmbedResult } from './index.js';
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -40,6 +40,8 @@ program
   .option('--debug', 'Enable debug logging to show full request parameters')
   .option('-n, --number <n>', 'Number of images to generate', '1')
   .option('--json', 'Output result as JSON (for scripting and Claude skills)')
+  .option('--metadata', 'Write a .metadata.json sidecar file alongside each image')
+  .option('--metadata-labels <labels...>', 'CLIP classification labels to include in metadata')
   .action(async (options) => {
     try {
       if (options.debug) {
@@ -132,6 +134,8 @@ program
         if (options.seed) generateOptions.seed = parseInt(options.seed);
         if (options.stylePreset) generateOptions.stylePreset = options.stylePreset;
         if (options.debug) generateOptions.debug = true;
+        if (options.metadata) generateOptions.metadata = true;
+        if (options.metadataLabels) generateOptions.metadataLabels = options.metadataLabels;
 
         const result = await generator.generate(generateOptions as any) as GenerateResult;
 
@@ -168,6 +172,124 @@ program
         console.log(JSON.stringify({ error: msg }));
       } else {
         console.error('❌ Error:', msg);
+      }
+      process.exit(1);
+    }
+  });
+
+// ─── Classify ──────────────────────────────────────────────────────────
+
+program
+  .command('classify')
+  .description('Zero-shot classify an image against text labels (CLIP)')
+  .requiredOption('--image <path>', 'Path to image file')
+  .requiredOption('--labels <labels...>', 'Labels to classify against')
+  .option('--debug', 'Enable debug logging')
+  .option('--json', 'Output result as JSON')
+  .option('-o, --output <path>', 'Save result to JSON file')
+  .action(async (options) => {
+    try {
+      const generator = new ImageGenerator({ provider: 'local' });
+
+      if (!options.json && isTTY) {
+        process.stderr.write('Classifying image...\n');
+      }
+
+      const result: ClassifyResult = await generator.classifyImage({
+        imagePath: path.resolve(options.image),
+        labels: options.labels,
+        debug: options.debug,
+      });
+
+      if (options.output) {
+        const fs = await import('fs/promises');
+        await fs.writeFile(options.output, JSON.stringify(result, null, 2));
+        if (!options.json) {
+          console.log(`Saved to: ${options.output}`);
+        }
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(`Classified in ${result.elapsed}s:`);
+        for (const { label, score } of result.labels) {
+          const bar = '█'.repeat(Math.round(score * 30));
+          console.log(`  ${label.padEnd(20)} ${(score * 100).toFixed(1).padStart(5)}%  ${bar}`);
+        }
+      }
+      process.exit(0);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      if (options.json) {
+        console.log(JSON.stringify({ error: msg }));
+      } else {
+        console.error('Error:', msg);
+      }
+      process.exit(1);
+    }
+  });
+
+// ─── Embed ─────────────────────────────────────────────────────────────
+
+program
+  .command('embed')
+  .description('Get CLIP embedding for an image or text')
+  .option('--image <path>', 'Path to image file')
+  .option('--text <text>', 'Text to embed')
+  .option('--debug', 'Enable debug logging')
+  .option('--json', 'Output result as JSON')
+  .option('-o, --output <path>', 'Save embedding to JSON file')
+  .action(async (options) => {
+    try {
+      if (!options.image && !options.text) {
+        const msg = 'Either --image or --text is required';
+        if (options.json) {
+          console.log(JSON.stringify({ error: msg }));
+        } else {
+          console.error('Error:', msg);
+        }
+        process.exit(1);
+      }
+
+      const generator = new ImageGenerator({ provider: 'local' });
+
+      if (!options.json && isTTY) {
+        process.stderr.write(`Embedding ${options.image ? 'image' : 'text'}...\n`);
+      }
+
+      const result: EmbedResult = await generator.embed({
+        imagePath: options.image ? path.resolve(options.image) : undefined,
+        text: options.text,
+        debug: options.debug,
+      });
+
+      if (options.output) {
+        const fs = await import('fs/promises');
+        await fs.writeFile(options.output, JSON.stringify(result, null, 2));
+        if (!options.json) {
+          console.log(`Saved to: ${options.output}`);
+        }
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(`Embedded in ${result.elapsed}s (${result.embedding.length} dims)`);
+        if (!options.output) {
+          // Print first few values as preview
+          const preview = result.embedding.slice(0, 8).map(v => v.toFixed(4)).join(', ');
+          console.log(`  [${preview}, ...]`);
+          console.log(`  Use -o output.json to save full embedding`);
+        }
+      }
+      process.exit(0);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      if (options.json) {
+        console.log(JSON.stringify({ error: msg }));
+      } else {
+        console.error('Error:', msg);
       }
       process.exit(1);
     }

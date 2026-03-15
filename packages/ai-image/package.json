@@ -1,7 +1,7 @@
 {
   "name": "ai-image",
   "version": "0.0.9",
-  "description": "A unified wrapper for image generation inference APIs (OpenAI, Replicate, Stability AI, FAL.ai) with CLI support, useful for MCP and sub-processes",
+  "description": "Unified image generation + CLIP vision analysis. 10 providers (OpenAI, Replicate, Stability, FAL, Together, BFL, Google, Fireworks, Ollama, local). Zero-shot classification and embeddings via MobileCLIP.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,10 +44,18 @@
     "black-forest-labs",
     "fireworks",
     "ollama",
-    "local"
+    "local",
+    "clip",
+    "mobileclip",
+    "classification",
+    "embedding",
+    "zero-shot",
+    "vision",
+    "apple-silicon",
+    "mlx"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/iplanwebsites/ai-image.git"

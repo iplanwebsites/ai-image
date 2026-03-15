@@ -6,13 +6,15 @@ import {
   GenerationSettings,
   ImageGrid,
   GenerationStatus,
+  OutputDirInput,
+  ClipPanel,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   Separator,
 } from '@ai-image/ui';
-import { getModels, checkHealth } from '../api/client.js';
+import { getModels, checkHealth, clipEmbed, clipClassify, clipSearch } from '../api/client.js';
 import { useGeneration } from '../hooks/use-generation.js';
 import type { ProviderInfo } from '../api/types.js';
 
@@ -98,8 +100,21 @@ export function GeneratePage() {
               availableSettings={currentProvider?.settings || []}
               disabled={gen.status === 'generating'}
             />
+            <Separator />
+            <OutputDirInput
+              value={gen.outputDir}
+              onChange={gen.setOutputDir}
+              disabled={gen.status === 'generating'}
+            />
           </CardContent>
         </Card>
+
+        <ClipPanel
+          onEmbed={clipEmbed}
+          onClassify={clipClassify}
+          onSearch={clipSearch}
+          imagePaths={gen.allImagePaths}
+        />
 
         {apiOnline === false && (
           <Card className="border-destructive">
