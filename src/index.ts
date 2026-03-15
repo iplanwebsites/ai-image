@@ -856,21 +856,82 @@ export class ImageGenerator {
       }
     }
 
+    // If nothing found, give a clear diagnostic
     if (!cmd) {
-      throw new Error(
-        'Cannot auto-start local server: ai-image-server not found.\n' +
-        'Install it with: cd server && uv venv && uv pip install -e .'
+      const hasPython = (() => {
+        try { execSync('which python3 2>/dev/null'); return true; } catch { return false; }
+      })();
+      const hasUv = (() => {
+        try { execSync('which uv 2>/dev/null'); return true; } catch { return false; }
+      })();
+
+      const serverDir = path.resolve(pkgDir, '..', 'server');
+      const lines = [
+        '[ai-image] Cannot start local image generation server.\n',
+      ];
+
+      if (!hasPython) {
+        lines.push(
+          'Python 3.11+ is required but not found.',
+          '',
+          'Install Python:',
+          '  macOS:   brew install python@3.13',
+          '  Ubuntu:  sudo apt install python3',
+          '  Windows: https://www.python.org/downloads/',
+        );
+      } else if (!hasUv) {
+        lines.push(
+          'Python found, but uv (package manager) is not installed.',
+          '',
+          'Install uv:',
+          '  macOS:   brew install uv',
+          '  Other:   curl -LsSf https://astral.sh/uv/install.sh | sh',
+        );
+      } else {
+        lines.push(
+          'Python and uv found, but ai-image-server is not installed.',
+          '',
+          'Set up the local server:',
+          `  cd ${serverDir}`,
+          '  uv venv && uv pip install -e .',
+        );
+      }
+
+      lines.push(
+        '',
+        'The local provider requires a Python server running on Apple Silicon.',
+        'See: https://github.com/iplanwebsites/ai-image/tree/main/server',
       );
+
+      throw new Error(lines.join('\n'));
     }
 
     if (debug) {
       console.error(`[debug] Starting local server: ${cmd} ${args.join(' ')}`);
     }
 
+    let procExited = false;
+    let procError = '';
+
     const proc = spawn(cmd, args, {
-      stdio: debug ? 'inherit' : 'ignore',
+      stdio: debug ? 'inherit' : ['ignore', 'ignore', 'pipe'],
       detached: true,
     });
+
+    // Capture stderr if not in debug mode (to show errors)
+    if (!debug && proc.stderr) {
+      const chunks: Buffer[] = [];
+      proc.stderr.on('data', (chunk: Buffer) => chunks.push(chunk));
+      proc.on('close', () => { procError = Buffer.concat(chunks).toString().trim(); });
+    }
+
+    proc.on('exit', (code) => {
+      procExited = true;
+      if (code !== 0 && code !== null) {
+        procError = procError || `Server exited with code ${code}`;
+      }
+    });
+
     proc.unref();
     ImageGenerator.localServerProcess = proc;
 
@@ -878,6 +939,16 @@ export class ImageGenerator {
     const maxWait = 120_000; // 2 minutes for model download/load
     const start = Date.now();
     while (Date.now() - start < maxWait) {
+      // Early exit if the process crashed
+      if (procExited) {
+        ImageGenerator.localServerProcess = null;
+        throw new Error(
+          `[ai-image] Local server failed to start.\n` +
+          (procError ? `Server output: ${procError}\n` : '') +
+          `\nTry running it manually to see the full error:\n  ${cmd} ${args.join(' ')}`
+        );
+      }
+
       if (await this.isLocalServerRunning(apiHost)) {
         if (debug) console.error('[debug] Local server is ready');
         return;
@@ -886,8 +957,9 @@ export class ImageGenerator {
     }
 
     throw new Error(
-      `Local server started but not ready after ${maxWait / 1000}s. ` +
-      'The model may still be downloading. Try again or start the server manually.'
+      `[ai-image] Local server started but not ready after ${maxWait / 1000}s.\n` +
+      'The model may still be downloading on first run.\n' +
+      `Try running it manually: ${cmd} ${args.join(' ')}`
     );
   }
 
