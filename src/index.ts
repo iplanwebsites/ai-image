@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl' | 'google' | 'fireworks' | 'ollama';
+export type Provider = 'openai' | 'replicate' | 'stability' | 'fal' | 'together' | 'bfl' | 'google' | 'fireworks' | 'ollama' | 'local';
 
 export interface ImageGeneratorOptions {
   provider: Provider;
@@ -83,6 +83,7 @@ export class ImageGenerator {
       case 'google':
       case 'fireworks':
       case 'ollama':
+      case 'local':
         // These providers use REST APIs directly; key stored for later use
         break;
       default:
@@ -110,6 +111,8 @@ export class ImageGenerator {
         return process.env.FIREWORKS_API_KEY;
       case 'ollama':
         return 'ollama'; // Ollama doesn't need an API key
+      case 'local':
+        return 'local'; // Local server doesn't need an API key
       default:
         return undefined;
     }
@@ -207,6 +210,9 @@ export class ImageGenerator {
           break;
         case 'ollama':
           usedModel = await this.generateOllama(options, savedPaths, outputDir, outputFilename);
+          break;
+        case 'local':
+          usedModel = await this.generateLocal(options, savedPaths, outputDir, outputFilename);
           break;
       }
 
@@ -780,6 +786,81 @@ export class ImageGenerator {
         const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
         await fs.writeFile(outputPath, buffer);
         savedPaths.push(outputPath);
+      }
+    }
+
+    return model;
+  }
+
+  // ─── Local (ai-image-server) ──────────────────────────────────────
+
+  private async generateLocal(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
+    const model = options.model || 'flux2-klein-4b';
+    // Support custom host via env or apiKey field
+    const isCustomHost = this.apiKey && this.apiKey.startsWith('http');
+    const apiHost = isCustomHost ? this.apiKey! : (process.env.AI_IMAGE_LOCAL_URL || 'http://localhost:8506');
+
+    const size = options.size || '512x512';
+    const [w, h] = size.split('x').map(Number);
+
+    const body: Record<string, unknown> = {
+      prompt: options.prompt,
+      width: w || 512,
+      height: h || 512,
+    };
+
+    if (options.steps != null) body.steps = options.steps;
+    if (options.seed != null) body.seed = options.seed;
+    if (options.guidanceScale != null) body.guidance = options.guidanceScale;
+    if (options.negativePrompt) body.negative_prompt = options.negativePrompt;
+
+    if (options.debug) {
+      console.error(`[debug] Local server request: POST ${apiHost}/generate`);
+      console.error('[debug] Local body:', JSON.stringify(body, null, 2));
+    }
+
+    const n = options.n || 1;
+    for (let i = 0; i < n; i++) {
+      // Each request needs a unique seed if generating multiple
+      if (n > 1 && options.seed != null) {
+        body.seed = options.seed + i;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(`${apiHost}/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        throw new Error(
+          `Local server not reachable at ${apiHost}. ` +
+          `Start it with: ai-image-server (from ai-image-local-python-server package). ` +
+          `Original error: ${err instanceof Error ? err.message : err}`
+        );
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Local server error (${response.status}): ${errText}`);
+      }
+
+      const contentType = response.headers.get('Content-Type') || '';
+
+      if (contentType.includes('image/')) {
+        // Server returned PNG bytes directly
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const ext = options.format || 'png';
+        const outputPath = await this.getOutputPath(options.prompt, i, ext, outputDir, outputFilename);
+        await fs.writeFile(outputPath, buffer);
+        savedPaths.push(outputPath);
+      } else {
+        // Server saved to disk and returned JSON
+        const result = await response.json() as { output?: string; status?: string };
+        if (result.output) {
+          savedPaths.push(result.output);
+        }
       }
     }
 

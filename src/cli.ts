@@ -22,7 +22,7 @@ program
   .alias('gen')
   .description('Generate an image from a text prompt')
   .option('--prompt <prompt>', 'Text prompt for image generation')
-  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama', 'openai')
+  .option('-p, --provider <provider>', 'Provider: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama, local', 'openai')
   .option('-k, --api-key <key>', 'API key (overrides environment variable)')
   .option('-o, --output <path>', 'Output file path')
   .option('-d, --output-dir <dir>', 'Output directory', process.cwd())
@@ -59,8 +59,8 @@ program
 
       const provider = options.provider.toLowerCase() as Provider;
 
-      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl', 'google', 'fireworks', 'ollama'].includes(provider)) {
-        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama';
+      if (!['openai', 'replicate', 'stability', 'fal', 'together', 'bfl', 'google', 'fireworks', 'ollama', 'local'].includes(provider)) {
+        const msg = 'Provider must be one of: openai, replicate, stability, fal, together, bfl, google, fireworks, ollama, local';
         if (options.json) {
           console.log(JSON.stringify({ error: msg }));
         } else {
@@ -102,6 +102,7 @@ program
           google: 'Google Imagen',
           fireworks: 'Fireworks AI',
           ollama: 'Ollama (local)',
+          local: 'Local server (MFLUX)',
         };
         const providerText = providerNames[provider] || provider;
         const loadingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -225,6 +226,9 @@ program
         { id: 'x/flux2-klein:9b', description: 'Flux 2 Klein 9B' },
         { id: 'x/z-image-turbo', description: 'Z-Image Turbo 6B' },
       ],
+      local: [
+        { id: 'flux2-klein-4b', description: 'FLUX.2 Klein 4B via MFLUX (default)', default: true },
+      ],
     };
 
     if (options.json) {
@@ -251,6 +255,8 @@ program
     models.fireworks.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\nOllama (local):');
     models.ollama.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
+    console.log('\nLocal server (MFLUX, Apple Silicon):');
+    models.local.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\n💡 Tip: Use any model ID from the respective provider\'s catalog');
   });
 
@@ -282,6 +288,7 @@ program
     console.log('   - Google:      https://aistudio.google.com/apikey');
     console.log('   - Fireworks:   https://fireworks.ai/account/api-keys');
     console.log('   - Ollama:      https://ollama.com (local, no key)');
+    console.log('   - Local:       pip install ai-image-local-python-server (Apple Silicon, no key)');
   });
 
 program.parse();
