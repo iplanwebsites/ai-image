@@ -262,9 +262,10 @@ def main():
     _sleep_timeout = args.auto_sleep
 
     # Check if model is already cached
-    from huggingface_hub import scan_cache_dir
     spec = MODELS[args.model]
-    if "config" in spec:
+    if spec.get("backend") == "diffusers":
+        model_name = spec["base_repo"]
+    elif "config" in spec:
         from mflux.models.common.config.model_config import ModelConfig
         model_name = getattr(ModelConfig, spec["config"])().model_name
     else:
@@ -272,22 +273,26 @@ def main():
 
     is_cached = False
     try:
+        from huggingface_hub import scan_cache_dir
         cache_info = scan_cache_dir()
         is_cached = any(repo.repo_id == model_name for repo in cache_info.repos)
     except Exception:
         pass
 
+    is_diffusers = spec.get("backend") == "diffusers"
+    download_hint = "~20 GB (GGUF Q4)" if is_diffusers else "~8 GB"
+
     if not is_cached:
         print(f"")
         print(f"  ┌─────────────────────────────────────────────────────┐")
-        print(f"  │  First run: downloading model weights (~8 GB).     │")
+        print(f"  │  First run: downloading model weights ({download_hint}).{'  ' if is_diffusers else '   '}│")
         print(f"  │  This is a one-time download and may take a while. │")
         print(f"  │  Model: {model_name:<42s} │")
         print(f"  │  Cache: ~/.cache/huggingface/hub/                  │")
         print(f"  └─────────────────────────────────────────────────────┘")
         print(f"")
 
-    print(f"Loading model: {args.model} (q{args.quantize})...")
+    print(f"Loading model: {args.model}{'' if is_diffusers else f' (q{args.quantize})'}...")
     _model = load_model(args.model, args.quantize, None, None)
     print(f"Model loaded.")
 

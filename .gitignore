@@ -48,6 +48,10 @@ __pycache__/
 # Turbo
 .turbo/
 
+# Example output (generated images + metadata)
+example/output/*.png
+example/output/*.json
+
 # Copied server files in ai-image package
 packages/ai-image/server/
 

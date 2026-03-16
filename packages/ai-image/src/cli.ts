@@ -309,6 +309,7 @@ program
       ],
       replicate: [
         { id: 'stability-ai/sdxl', description: 'Stable Diffusion XL (default)', default: true },
+        { id: 'black-forest-labs/flux-2-dev', description: 'FLUX.2 Dev' },
         { id: 'black-forest-labs/flux-dev', description: 'Flux Dev' },
         { id: 'black-forest-labs/flux-schnell', description: 'Flux Schnell (fast)' },
         { id: 'stability-ai/stable-diffusion-3', description: 'Stable Diffusion 3' },
@@ -320,6 +321,7 @@ program
       ],
       fal: [
         { id: 'fal-ai/flux/dev', description: 'Flux Dev (default)', default: true },
+        { id: 'fal-ai/flux2/dev', description: 'FLUX.2 Dev' },
         { id: 'fal-ai/flux/schnell', description: 'Flux Schnell (fast)' },
         { id: 'fal-ai/flux-pro/v1.1', description: 'Flux Pro v1.1' },
         { id: 'fal-ai/stable-diffusion-v3-medium', description: 'SD 3 Medium' },
@@ -332,6 +334,7 @@ program
       ],
       bfl: [
         { id: 'flux-pro-1.1', description: 'Flux Pro 1.1 (default)', default: true },
+        { id: 'flux-2-dev', description: 'FLUX.2 Dev' },
         { id: 'flux-pro', description: 'Flux Pro' },
         { id: 'flux-dev', description: 'Flux Dev' },
       ],
@@ -349,7 +352,20 @@ program
         { id: 'x/z-image-turbo', description: 'Z-Image Turbo 6B' },
       ],
       local: [
+        { id: 'flux2-dev', description: 'FLUX.2 Dev 32B (GGUF Q4, ~20 GB)' },
         { id: 'flux2-klein-4b', description: 'FLUX.2 Klein 4B via MFLUX (default)', default: true },
+        { id: 'flux2-klein-9b', description: 'FLUX.2 Klein 9B' },
+        { id: 'flux2-klein-base-4b', description: 'FLUX.2 Klein Base 4B' },
+        { id: 'flux2-klein-base-9b', description: 'FLUX.2 Klein Base 9B' },
+        { id: 'flux1-dev', description: 'FLUX.1 Dev' },
+        { id: 'flux1-schnell', description: 'FLUX.1 Schnell (fast)' },
+        { id: 'z-image', description: 'Z-Image (Tongyi)' },
+        { id: 'z-image-turbo', description: 'Z-Image Turbo (fast)' },
+        { id: 'fibo', description: 'FIBO (Bria AI)' },
+        { id: 'fibo-lite', description: 'FIBO Lite (Bria AI)' },
+        { id: 'qwen-image', description: 'Qwen Image' },
+        { id: 'seedvr2-3b', description: 'SeedVR2 3B' },
+        { id: 'seedvr2-7b', description: 'SeedVR2 7B' },
       ],
     };
 
@@ -380,6 +396,48 @@ program
     console.log('\nLocal server (MFLUX, Apple Silicon):');
     models.local.forEach(m => console.log(`  - ${m.id} ${m.default ? '(default)' : ''} — ${m.description}`));
     console.log('\n💡 Tip: Use any model ID from the respective provider\'s catalog');
+  });
+
+// Benchmark local models
+program
+  .command('benchmark')
+  .description('Benchmark local image generation models')
+  .option('-m, --models <models...>', 'Models to benchmark (default: flux2-klein-4b)')
+  .option('--all', 'Benchmark all available local models')
+  .option('--sizes <sizes...>', 'Image sizes to test (default: 512x512 1024x1024)')
+  .option('-q, --quantize <level>', 'Quantization level for MFLUX models', '8')
+  .option('-o, --output <file>', 'Output markdown file (default: print to stdout)')
+  .option('--append', 'Append to output file instead of overwriting')
+  .option('--json', 'Output raw JSON instead of Markdown')
+  .option('--no-warmup', 'Skip warmup run')
+  .action(async (options) => {
+    const { spawnSync } = await import('child_process');
+    const homePath = process.env.HOME || process.env.USERPROFILE || '~';
+    const benchCmd = require('path').join(homePath, '.ai-image', 'server', '.venv', 'bin', 'ai-image-benchmark');
+    const exists = require('fs').existsSync(benchCmd);
+
+    if (!exists) {
+      console.error('[ai-image] Benchmark requires the local server to be installed.');
+      console.error('Run a local generation first to trigger install, or install manually:');
+      console.error('  ai-image generate -p local --prompt "test"');
+      process.exit(1);
+    }
+
+    const args: string[] = [];
+    if (options.models) { args.push('-m', ...options.models); }
+    if (options.all) { args.push('--all'); }
+    if (options.sizes) { args.push('--sizes', ...options.sizes); }
+    if (options.quantize) { args.push('-q', options.quantize); }
+    if (options.output) { args.push('-o', options.output); }
+    if (options.append) { args.push('--append'); }
+    if (options.json) { args.push('--json'); }
+    if (options.noWarmup) { args.push('--no-warmup'); }
+
+    const result = spawnSync(benchCmd, args, {
+      stdio: 'inherit',
+      env: process.env,
+    });
+    process.exit(result.status ?? 1);
   });
 
 // Show environment setup

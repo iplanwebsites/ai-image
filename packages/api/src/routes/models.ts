@@ -21,6 +21,7 @@ const MODELS: Record<string, Array<{ id: string; description: string; default?: 
   ],
   replicate: [
     { id: 'stability-ai/sdxl', description: 'Stable Diffusion XL', default: true },
+    { id: 'black-forest-labs/flux-2-dev', description: 'FLUX.2 Dev' },
     { id: 'black-forest-labs/flux-dev', description: 'Flux Dev' },
     { id: 'black-forest-labs/flux-schnell', description: 'Flux Schnell' },
     { id: 'stability-ai/stable-diffusion-3', description: 'SD 3' },
@@ -32,6 +33,7 @@ const MODELS: Record<string, Array<{ id: string; description: string; default?: 
   ],
   fal: [
     { id: 'fal-ai/flux/dev', description: 'Flux Dev', default: true },
+    { id: 'fal-ai/flux2/dev', description: 'FLUX.2 Dev' },
     { id: 'fal-ai/flux/schnell', description: 'Flux Schnell' },
     { id: 'fal-ai/flux-pro/v1.1', description: 'Flux Pro v1.1' },
     { id: 'fal-ai/stable-diffusion-v3-medium', description: 'SD 3 Medium' },
@@ -44,6 +46,7 @@ const MODELS: Record<string, Array<{ id: string; description: string; default?: 
   ],
   bfl: [
     { id: 'flux-pro-1.1', description: 'Flux Pro 1.1', default: true },
+    { id: 'flux-2-dev', description: 'FLUX.2 Dev' },
     { id: 'flux-pro', description: 'Flux Pro' },
     { id: 'flux-dev', description: 'Flux Dev' },
   ],
@@ -61,7 +64,20 @@ const MODELS: Record<string, Array<{ id: string; description: string; default?: 
     { id: 'x/z-image-turbo', description: 'Z-Image Turbo 6B' },
   ],
   local: [
+    { id: 'flux2-dev', description: 'FLUX.2 Dev 32B (GGUF Q4)' },
     { id: 'flux2-klein-4b', description: 'FLUX.2 Klein 4B via MFLUX', default: true },
+    { id: 'flux2-klein-9b', description: 'FLUX.2 Klein 9B' },
+    { id: 'flux2-klein-base-4b', description: 'FLUX.2 Klein Base 4B' },
+    { id: 'flux2-klein-base-9b', description: 'FLUX.2 Klein Base 9B' },
+    { id: 'flux1-dev', description: 'FLUX.1 Dev' },
+    { id: 'flux1-schnell', description: 'FLUX.1 Schnell' },
+    { id: 'z-image', description: 'Z-Image (Tongyi)' },
+    { id: 'z-image-turbo', description: 'Z-Image Turbo' },
+    { id: 'fibo', description: 'FIBO (Bria AI)' },
+    { id: 'fibo-lite', description: 'FIBO Lite (Bria AI)' },
+    { id: 'qwen-image', description: 'Qwen Image' },
+    { id: 'seedvr2-3b', description: 'SeedVR2 3B' },
+    { id: 'seedvr2-7b', description: 'SeedVR2 7B' },
   ],
 };
 

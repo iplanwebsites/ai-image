@@ -41,11 +41,37 @@ export interface GenerateOptions {
   steps?: number;
   // Seed for reproducibility
   seed?: number;
-  // Write a metadata.json sidecar file alongside each image.
-  // Includes generation params and CLIP embedding when the local server is available.
+  // Input image for img2img (path to local file — local provider only)
+  inputImage?: string;
+  // Denoising strength for img2img (0 = max change, 1 = min change). Default: 0.75
+  imageStrength?: number;
+  // Collect metadata (generation params + CLIP embedding when local server is available).
+  // Returns ImageMetadata[] in the result.
   metadata?: boolean;
+  // Write a .metadata.json sidecar file alongside each image (default: true when metadata is true).
+  // Set to false to get metadata in the result without writing files.
+  metadataSidecar?: boolean;
   // Labels for CLIP classification (included in metadata when provided)
   metadataLabels?: string[];
+}
+
+export interface ImageMetadata {
+  provider: Provider;
+  model: string;
+  prompt: string;
+  size?: string;
+  quality?: string;
+  format?: string;
+  seed?: number;
+  steps?: number;
+  guidanceScale?: number;
+  negativePrompt?: string;
+  elapsed: number;
+  generatedAt: string;
+  clip?: {
+    embedding: number[];
+    labels?: Array<{ label: string; score: number }>;
+  };
 }
 
 export interface GenerateResult {
@@ -53,6 +79,7 @@ export interface GenerateResult {
   provider: Provider;
   model: string;
   elapsed: number;
+  metadata?: ImageMetadata[];
 }
 
 export interface ClassifyOptions {
@@ -251,9 +278,9 @@ export class ImageGenerator {
         elapsed: Date.now() - startTime,
       };
 
-      // Write metadata sidecar JSON for each image
+      // Build metadata and optionally write sidecar JSON for each image
       if (options.metadata && savedPaths.length > 0) {
-        await this.writeMetadata(savedPaths, options, result);
+        result.metadata = await this.buildMetadata(savedPaths, options, result);
       }
 
       return result;
@@ -263,10 +290,11 @@ export class ImageGenerator {
     }
   }
 
-  private async writeMetadata(savedPaths: string[], options: GenerateOptions, result: GenerateResult): Promise<void> {
+  private async buildMetadata(savedPaths: string[], options: GenerateOptions, result: GenerateResult): Promise<ImageMetadata[]> {
+    const metadataList: ImageMetadata[] = [];
+
     for (const imagePath of savedPaths) {
-      const meta: Record<string, unknown> = {
-        image: path.basename(imagePath),
+      const meta: ImageMetadata = {
         provider: result.provider,
         model: result.model,
         prompt: options.prompt,
@@ -283,7 +311,9 @@ export class ImageGenerator {
 
       // Remove undefined values
       for (const key of Object.keys(meta)) {
-        if (meta[key] === undefined) delete meta[key];
+        if ((meta as any)[key] === undefined) {
+          delete (meta as any)[key];
+        }
       }
 
       // Start local server if needed, then add CLIP data
@@ -311,20 +341,27 @@ export class ImageGenerator {
           });
           if (classifyRes.ok) {
             const classifyData = await classifyRes.json() as ClassifyResult;
-            (meta.clip as Record<string, unknown>).labels = classifyData.labels;
+            meta.clip = { ...meta.clip!, labels: classifyData.labels };
           }
         }
       } catch {
-        // Local server unavailable (e.g. no Python) — metadata still written without CLIP
+        // Local server unavailable (e.g. no Python) — metadata still built without CLIP
       }
 
-      const metaPath = imagePath.replace(/\.[^.]+$/, '.metadata.json');
-      await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
+      metadataList.push(meta);
 
-      if (options.debug) {
-        console.error(`[debug] Metadata saved: ${metaPath}`);
+      // Write sidecar file (unless explicitly disabled)
+      if (options.metadataSidecar !== false) {
+        const sidecar = { image: path.basename(imagePath), ...meta };
+        const metaPath = imagePath.replace(/\.[^.]+$/, '.metadata.json');
+        await fs.writeFile(metaPath, JSON.stringify(sidecar, null, 2));
+        if (options.debug) {
+          console.error(`[debug] Metadata saved: ${metaPath}`);
+        }
       }
     }
+
+    return metadataList;
   }
 
   private reinitClient(apiKey: string): void {
@@ -1051,7 +1088,7 @@ export class ImageGenerator {
     console.error('[ai-image] Models cached in: ~/.cache/huggingface/hub/');
   }
 
-  private async startLocalServer(apiHost: string, debug?: boolean): Promise<void> {
+  private async startLocalServer(apiHost: string, debug?: boolean, model?: string): Promise<void> {
     if (ImageGenerator.localServerProcess) return;
 
     const url = new URL(apiHost);
@@ -1065,6 +1102,9 @@ export class ImageGenerator {
 
     const cmd = path.join(home, 'server', '.venv', 'bin', 'ai-image-server');
     const args = ['--port', port, '--auto-sleep', '300'];
+    if (model) {
+      args.push('--model', model);
+    }
 
     // Verify binary exists
     const hasBin = await fs.access(cmd).then(() => true, () => false);
@@ -1097,6 +1137,7 @@ export class ImageGenerator {
 
     proc.on('exit', (code) => {
       procExited = true;
+      ImageGenerator.localServerProcess = null;
       if (code !== 0 && code !== null) {
         procError = procError || `Server exited with code ${code}`;
       }
@@ -1132,17 +1173,17 @@ export class ImageGenerator {
     );
   }
 
-  private async ensureLocalServer(apiHost: string, debug?: boolean): Promise<void> {
+  private async ensureLocalServer(apiHost: string, debug?: boolean, model?: string): Promise<void> {
     if (await this.isLocalServerRunning(apiHost)) return;
     console.error('[ai-image] Starting local server (auto-sleeps after 5 min idle)...');
-    await this.startLocalServer(apiHost, debug);
+    await this.startLocalServer(apiHost, debug, model);
   }
 
   private async generateLocal(options: GenerateOptions, savedPaths: string[], outputDir: string, outputFilename?: string): Promise<string> {
     const model = options.model || 'flux2-klein-4b';
     const apiHost = this.getLocalHost();
 
-    await this.ensureLocalServer(apiHost, options.debug);
+    await this.ensureLocalServer(apiHost, options.debug, model);
 
     const size = options.size || '512x512';
     const [w, h] = size.split('x').map(Number);
@@ -1157,6 +1198,8 @@ export class ImageGenerator {
     if (options.seed != null) body.seed = options.seed;
     if (options.guidanceScale != null) body.guidance = options.guidanceScale;
     if (options.negativePrompt) body.negative_prompt = options.negativePrompt;
+    if (options.inputImage) body.image_path = options.inputImage;
+    if (options.imageStrength != null) body.image_strength = options.imageStrength;
 
     if (options.debug) {
       console.error(`[debug] Local server request: POST ${apiHost}/generate`);

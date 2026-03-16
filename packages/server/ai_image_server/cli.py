@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Minimal CLI to generate images locally using MFLUX on Apple Silicon."""
+from __future__ import annotations
 
 import argparse
 import random
@@ -12,18 +13,105 @@ MODELS = {
         "config": "flux2_klein_4b",
         "defaults": {"steps": 9, "width": 512, "height": 512},
     },
+    "flux2-klein-9b": {
+        "class": "mflux.models.flux2.Flux2Klein",
+        "config": "flux2_klein_9b",
+        "defaults": {"steps": 9, "width": 512, "height": 512},
+    },
+    "flux2-klein-base-4b": {
+        "class": "mflux.models.flux2.Flux2Klein",
+        "config": "flux2_klein_base_4b",
+        "defaults": {"steps": 9, "width": 512, "height": 512},
+    },
+    "flux2-klein-base-9b": {
+        "class": "mflux.models.flux2.Flux2Klein",
+        "config": "flux2_klein_base_9b",
+        "defaults": {"steps": 9, "width": 512, "height": 512},
+    },
+    "flux1-dev": {
+        "class": "mflux.models.flux.variants.txt2img.flux.Flux1",
+        "config": "dev",
+        "defaults": {"steps": 20, "width": 1024, "height": 1024},
+    },
+    "flux1-schnell": {
+        "class": "mflux.models.flux.variants.txt2img.flux.Flux1",
+        "config": "schnell",
+        "defaults": {"steps": 4, "width": 1024, "height": 1024},
+    },
+    "z-image": {
+        "class": "mflux.models.z_image.ZImage",
+        "config": "z_image",
+        "defaults": {"steps": 20, "width": 1024, "height": 1024},
+    },
+    "z-image-turbo": {
+        "class": "mflux.models.z_image.ZImageTurbo",
+        "config": "z_image_turbo",
+        "defaults": {"steps": 8, "width": 1024, "height": 1024},
+    },
+    "fibo": {
+        "class": "mflux.models.fibo.cli.fibo_generate.FIBO",
+        "config": "fibo",
+        "defaults": {"steps": 20, "width": 832, "height": 480},
+    },
+    "fibo-lite": {
+        "class": "mflux.models.fibo.cli.fibo_generate.FIBO",
+        "config": "fibo_lite",
+        "defaults": {"steps": 20, "width": 832, "height": 480},
+    },
+    "qwen-image": {
+        "class": "mflux.models.qwen.cli.qwen_image_generate.QwenImage",
+        "config": "qwen_image",
+        "defaults": {"steps": 30, "width": 1024, "height": 1024},
+    },
+    "seedvr2-3b": {
+        "class": "mflux.models.seedvr2.SeedVR2",
+        "config": "seedvr2_3b",
+        "defaults": {"steps": 20, "width": 1024, "height": 1024},
+    },
+    "seedvr2-7b": {
+        "class": "mflux.models.seedvr2.SeedVR2",
+        "config": "seedvr2_7b",
+        "defaults": {"steps": 20, "width": 1024, "height": 1024},
+    },
+    # ── Diffusers + GGUF models ──────────────────────────────────────
+    "flux2-dev": {
+        "backend": "diffusers",
+        "gguf": "https://huggingface.co/city96/FLUX.2-dev-gguf/blob/main/flux2-dev-Q4_K_M.gguf",
+        "base_repo": "black-forest-labs/FLUX.2-dev",
+        "pipeline": "Flux2Pipeline",
+        "defaults": {"steps": 30, "width": 1024, "height": 1024},
+    },
 }
 
 
 def load_model(name: str, quantize: int | None, lora_paths: list[str] | None, lora_scales: list[float] | None):
     spec = MODELS[name]
+
+    # Diffusers + GGUF backend
+    if spec.get("backend") == "diffusers":
+        from ai_image_server.diffusers_model import DiffusersModel
+        return DiffusersModel(
+            gguf_url=spec["gguf"],
+            base_repo=spec["base_repo"],
+            pipeline_class=spec["pipeline"],
+        )
+
+    # MFLUX backend
     module_path, class_name = spec["class"].rsplit(".", 1)
 
     import importlib
+    import inspect
     mod = importlib.import_module(module_path)
     cls = getattr(mod, class_name)
 
-    kwargs: dict = {"quantize": quantize, "lora_paths": lora_paths, "lora_scales": lora_scales}
+    kwargs: dict = {"quantize": quantize}
+
+    # Only pass lora args if the model supports them
+    sig = inspect.signature(cls.__init__)
+    if "lora_paths" in sig.parameters:
+        kwargs["lora_paths"] = lora_paths
+        kwargs["lora_scales"] = lora_scales
+
     if "config" in spec:
         from mflux.models.common.config.model_config import ModelConfig
         kwargs["model_config"] = getattr(ModelConfig, spec["config"])()
